@@ -6,9 +6,9 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, Field
 
 from app.api.deps import get_current_user
 from app.db.database import get_db
@@ -63,15 +63,9 @@ async def get_vocabulary_timeline(
             groups[date_str] = []
         groups[date_str].append(VocabularyResponse.model_validate(vocab))
 
-    timeline = [
-        TimelineGroup(date=date_str, words=words)
-        for date_str, words in groups.items()
-    ]
-    
+    timeline = [TimelineGroup(date=date_str, words=words) for date_str, words in groups.items()]
+
     # 保证按日期倒序
     timeline.sort(key=lambda x: x.date, reverse=True)
 
-    return VocabularyTimelineResponse(
-        timeline=timeline,
-        total=len(vocabularies)
-    )
+    return VocabularyTimelineResponse(timeline=timeline, total=len(vocabularies))

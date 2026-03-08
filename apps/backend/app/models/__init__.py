@@ -5,6 +5,7 @@
 
 from app.models.article import Article
 from app.models.note import Note
+from app.models.study_log import StudyLog
 from app.models.user import User
 
-__all__ = ["User", "Article", "Note"]
+__all__ = ["User", "Article", "Note", "StudyLog"]

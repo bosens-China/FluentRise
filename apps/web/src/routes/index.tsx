@@ -23,6 +23,7 @@ import { useCurrentUser } from '@/hooks/useAuth';
 import { isAuthenticated } from '@/utils/request';
 import { AssessmentModal } from '@/components/assessment';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { StudyCalendar } from '@/components/studyLog/StudyCalendar';
 import {
   generateTodayArticle,
   getTodayArticle,
@@ -278,10 +279,11 @@ function HomePage() {
       {renderWelcome()}
 
       <Row gutter={[24, 24]}>
-        {/* 左侧主栏：今日任务 */}
+        {/* 左侧主栏：今日任务 & 打卡日历 */}
         <Col xs={24} lg={16}>
           <div className="flex flex-col space-y-8">
             <section>{renderTodayTask()}</section>
+            <section><StudyCalendar /></section>
           </div>
         </Col>
 

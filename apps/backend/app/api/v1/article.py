@@ -296,19 +296,22 @@ async def update_article_progress(
     if request.is_completed is not None:
         was_completed = article.is_completed
         article.is_completed = request.is_completed
-        
+
+        # 记录打卡，只要完成了部分进度或者标记了完成就算学习了该课程
+        from app.services.study_log_service import study_log_service
+
+        await study_log_service.check_in(db, current_user.id, course_title=article.title)
+
         # 第一次完成时，将生词添加到用户的生词本
         if request.is_completed and not was_completed and article.vocabulary:
             from app.models.vocabulary import Vocabulary
-            from sqlalchemy import select
-            
+
             # 检查是否已经存在这些单词，避免重复添加
             existing_result = await db.execute(
-                select(Vocabulary.word)
-                .where(Vocabulary.user_id == current_user.id)
+                select(Vocabulary.word).where(Vocabulary.user_id == current_user.id)
             )
             existing_words = {row[0] for row in existing_result.all()}
-            
+
             new_vocab_entries = []
             for v_data in article.vocabulary:
                 word = v_data.get("word")
@@ -321,11 +324,11 @@ async def update_article_progress(
                             uk_phonetic=v_data.get("uk_phonetic"),
                             us_phonetic=v_data.get("us_phonetic"),
                             meaning=v_data.get("meaning", ""),
-                            created_at=datetime.utcnow()
+                            created_at=datetime.utcnow(),
                         )
                     )
                     existing_words.add(word)  # 更新集合避免同一次添加中出现重复
-            
+
             if new_vocab_entries:
                 db.add_all(new_vocab_entries)
 
