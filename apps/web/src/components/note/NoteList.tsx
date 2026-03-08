@@ -27,6 +27,9 @@ export function NoteList({ hideTitle }: NoteListProps = {}) {
       getNotes({ page, page_size: pageSize }),
     {
       defaultParams: [1, 10],
+      onError: (error) => {
+        message.error(error.message || '获取笔记列表失败');
+      },
     }
   );
 

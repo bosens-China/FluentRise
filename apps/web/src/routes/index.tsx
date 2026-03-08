@@ -87,6 +87,9 @@ function HomePage() {
           setTodayArticle(data.article);
         }
       },
+      onError: (error) => {
+        message.error(error.message || '获取今日任务失败');
+      },
     }
   );
 

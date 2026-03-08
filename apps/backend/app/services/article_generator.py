@@ -174,6 +174,7 @@ class ArticleGenerator:
         user_level: int,
         learning_goals: list[str],
         custom_goal: str | None,
+        known_words: list[str],
         target_date: date,
         plan: OutputPlan,
     ) -> ChatPromptTemplate:
@@ -181,6 +182,7 @@ class ArticleGenerator:
         target_level = min(user_level + 1, 6)
         goal_str = ", ".join(learning_goals) if learning_goals else "daily"
         custom_goal_text = custom_goal or "无"
+        known_words_str = ", ".join(known_words) if known_words else "无"
         feedback_placeholder = (
             "\n【上一次质量检查未通过，必须修正】\n{quality_feedback}\n请修正后再输出。"
         )
@@ -203,6 +205,7 @@ class ArticleGenerator:
 - 目标等级: {target_level}/6
 - 学习目标标签: {goals}
 - 用户自定义诉求: {custom_goal}
+- 用户已掌握词汇: {known_words} （请在课文中尽量使用这些词作为基础，并自然引入少量高于这些基础的新词）
 
 【参考骨架】
 - 册别: {source_book}
@@ -219,7 +222,7 @@ class ArticleGenerator:
 - 课文部分需要严格包含你所给出的生词，确保生词在课文中被使用。
 - 语法讲解数量至少: {grammar_points}
 - 练习数量至少: {exercises}
-- 练习类型需混合 choice/fill/translation
+- 练习类型必须全部为阅读理解单选题 (choice)，必须提供4个选项 (options)，并给出准确的参考答案 (answer)。
 - 如果是对话形式，请在 content 中标注 speaker (例如: "Alice", "Bob", "Narrator")
 
 【日期】
@@ -233,6 +236,7 @@ class ArticleGenerator:
             target_level=target_level,
             goals=goal_str,
             custom_goal=custom_goal_text,
+            known_words=known_words_str,
             source_book=skeleton.book,
             source_lesson=skeleton.lesson,
             theme=skeleton.theme,
@@ -308,13 +312,15 @@ class ArticleGenerator:
         if missing_vocab:
             issues.append(f"以下生词未在课文中出现: {', '.join(missing_vocab)}。")
 
-        if len(article.exercises) < plan.exercises:
-            issues.append(f"练习至少 {plan.exercises} 个，实际为 {len(article.exercises)}。")
+        if article.exercises is None or len(article.exercises) < plan.exercises:
+            issues.append(f"练习至少 {plan.exercises} 个，实际为 {len(article.exercises) if article.exercises else 0}。")
 
-        supported_types = {"choice", "fill", "translation"}
-        invalid_types = [
-            item.type for item in article.exercises if item.type not in supported_types
-        ]
+        supported_types = {"choice"}
+        invalid_types = []
+        if article.exercises:
+            invalid_types = [
+                item.type for item in article.exercises if item.type not in supported_types
+            ]
         if invalid_types:
             issues.append(f"练习类型存在非法值: {invalid_types}。")
 
@@ -340,9 +346,10 @@ class ArticleGenerator:
         user_level: int,
         learning_goals: list[str],
         custom_goal: str | None = None,
+        known_words: list[str] | None = None,
         target_date: date | None = None,
     ) -> ArticleContent:
-        """生成文章，包含质量检查和重试。"""
+        """生成文章，直接抛出失败原因。"""
         actual_date = target_date or date.today()
         target_level = min(user_level + 1, 6)
         skeleton = self.select_skeleton(user_level, learning_goals)
@@ -352,43 +359,33 @@ class ArticleGenerator:
             user_level=user_level,
             learning_goals=learning_goals,
             custom_goal=custom_goal,
+            known_words=known_words or [],
             target_date=actual_date,
             plan=plan,
         )
         chain = prompt | self.structured_llm
 
-        feedback = ""
-        max_attempts = 2  # 减少重试次数，避免过长等待
+        print(f"[ArticleGenerator] Generating article for level {target_level}...")
+        try:
+            result = await chain.ainvoke({"quality_feedback": ""})
+            article = self._ensure_article_content(result)
+        except Exception as exc:
+            print(f"[ArticleGenerator] Generation Failed (Structure/API error): {exc}")
+            raise ValueError(f"结构化输出或 API 调用失败：{exc}") from exc
 
-        for attempt in range(1, max_attempts + 1):
-            try:
-                print(f"[ArticleGenerator] Attempt {attempt}/{max_attempts} generating...")
-                result = await chain.ainvoke({"quality_feedback": feedback})
-                article = self._ensure_article_content(result)
-            except Exception as exc:
-                feedback = f"结构化输出校验失败：{exc}"
-                if attempt == max_attempts:
-                    raise ValueError(
-                        f"生成内容在 {max_attempts} 次尝试后仍未通过结构化校验：\n{feedback}"
-                    ) from exc
-                continue
+        # 强制覆盖来源字段，避免模型漂移
+        article.source_book = skeleton.book
+        article.source_lesson = skeleton.lesson
+        article.level = target_level
 
-            # 强制覆盖来源字段，避免模型漂移
-            article.source_book = skeleton.book
-            article.source_lesson = skeleton.lesson
-            article.level = target_level
-
-            issues = self._quality_check(article, skeleton, plan, target_level)
-            if not issues:
-                return article
-
+        issues = self._quality_check(article, skeleton, plan, target_level)
+        if issues:
             feedback = "\n".join(f"- {issue}" for issue in issues)
-            if attempt == max_attempts:
-                raise ValueError(
-                    f"生成内容在 {max_attempts} 次尝试后仍未通过质量检查：\n{feedback}"
-                )
+            print(f"[ArticleGenerator] Quality Check Failed:\n{feedback}")
+            # print("Raw output:", article.model_dump_json(indent=2))
+            raise ValueError(f"生成内容未通过质量检查：\n{feedback}")
 
-        raise ValueError("生成流程出现未预期分支。")
+        return article
 
 
 article_generator = ArticleGenerator()

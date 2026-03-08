@@ -10,6 +10,7 @@ import {
   Row,
   Col,
   Tag,
+  message,
 } from 'antd';
 import {
   CheckCircleFilled,
@@ -53,6 +54,9 @@ export function AssessmentModal({
   useRequest(getAssessmentData, {
     manual: false,
     onSuccess: (data) => setAssessmentData(data),
+    onError: (error) => {
+      message.error(error.message || '获取评估数据失败');
+    },
   });
 
   // 提交评估
@@ -61,15 +65,20 @@ export function AssessmentModal({
     onSuccess: () => {
       setCurrentStep(3);
     },
+    onError: (error) => {
+      message.error(error.message || '提交评估失败');
+    },
   });
 
   // 每次打开弹窗时重置状态
   useEffect(() => {
     if (open) {
-      setCurrentStep(0);
-      setSelectedLevel(null);
-      setSelectedGoals([]);
-      setCustomGoal('');
+      setTimeout(() => {
+        setCurrentStep(0);
+        setSelectedLevel(null);
+        setSelectedGoals([]);
+        setCustomGoal('');
+      }, 0);
     }
   }, [open]);
 

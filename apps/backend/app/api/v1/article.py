@@ -6,7 +6,6 @@ from datetime import date, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -128,10 +127,19 @@ async def generate_today_article(
             learning_goals_val: list[str] = raw_goals if isinstance(raw_goals, list) else []  # type: ignore
             custom_goal_val: str | None = str(raw_custom) if raw_custom else None  # type: ignore
 
+            # 获取用户的生词本作为 known_words
+            from app.models.vocabulary import Vocabulary
+
+            vocab_result = await db.execute(
+                select(Vocabulary.word).where(Vocabulary.user_id == current_user.id)
+            )
+            known_words = [row[0] for row in vocab_result.all()]
+
             generated = await article_generator.generate(
                 user_level=user_level_val,
                 learning_goals=learning_goals_val,
                 custom_goal=custom_goal_val,
+                known_words=known_words,
                 target_date=target_date,
             )
         except Exception as e:
@@ -157,7 +165,7 @@ async def generate_today_article(
             content=[c.model_dump() for c in generated.content],
             grammar=[g.model_dump() for g in generated.grammar],
             tips=[t.model_dump() for t in generated.tips],
-            exercises=[e.model_dump() for e in generated.exercises],
+            exercises=[e.model_dump() for e in generated.exercises] if generated.exercises else [],
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
         )
@@ -277,8 +285,10 @@ async def generate_article_audio(
     )
 
     try:
-        audio_stream = tts_service.generate_audio_stream(article_content)
-        return StreamingResponse(audio_stream, media_type="audio/mpeg")
+        from fastapi import Response
+
+        audio_bytes = await tts_service.generate_article_audio_bytes(article_content, article_id)
+        return Response(content=audio_bytes, media_type="audio/mpeg")
     except ImportError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

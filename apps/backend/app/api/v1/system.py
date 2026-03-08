@@ -3,6 +3,7 @@
 """
 
 import random
+from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -208,3 +209,30 @@ async def get_quotes(count: int = 5) -> list[dict]:
     if count > len(ENCOURAGING_QUOTES):
         count = len(ENCOURAGING_QUOTES)
     return random.sample(ENCOURAGING_QUOTES, count)
+
+
+@router.get("/tts", summary="通用文字转语音")
+async def generate_tts(text: str) -> Any:
+    """
+    将任意文本转换为语音并返回音频流
+    """
+    from fastapi import HTTPException, Response, status
+
+    from app.services.tts_service import tts_service
+
+    if not text.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="文本不能为空")
+
+    try:
+        audio_bytes = await tts_service.get_audio_bytes_cached(text)
+        return Response(content=audio_bytes, media_type="audio/mpeg")
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="TTS 服务不可用 (edge-tts 未安装)",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"音频生成失败: {str(e)}",
+        )

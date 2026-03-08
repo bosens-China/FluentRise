@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useRequest } from 'ahooks';
-import { Typography, Card, Spin, Empty, Tag } from 'antd';
+import { Typography, Card, Spin, Empty, Tag, message } from 'antd';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { getVocabularyTimeline } from '@/api/vocabulary';
 
@@ -11,7 +11,11 @@ export const Route = createFileRoute('/vocabulary')({
 });
 
 function VocabularyPage() {
-  const { data, loading, error } = useRequest(getVocabularyTimeline);
+  const { data, loading, error } = useRequest(getVocabularyTimeline, {
+    onError: (error) => {
+      message.error(error.message || '获取生词本失败');
+    },
+  });
 
   return (
     <DashboardLayout>

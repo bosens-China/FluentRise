@@ -2,7 +2,8 @@
 学习打卡记录模型
 """
 
-from datetime import date, datetime
+from datetime import date as date_type
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
@@ -24,7 +25,7 @@ class StudyLog(Base):
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, comment="用户ID"
     )
-    date: Mapped[date] = mapped_column(Date, nullable=False, index=True, comment="打卡日期")
+    date: Mapped[date_type] = mapped_column(Date, nullable=False, index=True, comment="打卡日期")
     course_title: Mapped[str | None] = mapped_column(String(200), nullable=True, comment="课程名称")
 
     # 时间戳

@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useRequest } from 'ahooks';
-import { Typography, Card, Empty, Tag, Button, Pagination, Spin } from 'antd';
+import { Typography, Card, Empty, Tag, Button, Pagination, Spin, message } from 'antd';
 import { ReadOutlined, CalendarOutlined } from '@ant-design/icons';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { getArticleHistory } from '@/api/article';
@@ -23,6 +23,9 @@ function ReviewPage() {
     (page = 1, pageSize = 12) => getArticleHistory(page, pageSize),
     {
       defaultParams: [1, 12],
+      onError: (error) => {
+        message.error(error.message || '获取复习记录失败');
+      },
     },
   );
 

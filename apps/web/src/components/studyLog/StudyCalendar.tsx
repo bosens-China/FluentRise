@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react'
-import { Card, Typography, Space, Tooltip, Button } from 'antd'
+import { Card, Typography, Space, Tooltip, Button, message } from 'antd'
 import { FireOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons'
 import { useRequest } from 'ahooks'
 import dayjs, { type Dayjs } from 'dayjs'
@@ -24,6 +24,9 @@ export const StudyCalendar: React.FC = () => {
     onSuccess: (data) => {
       setStreakData(data)
     },
+    onError: (error) => {
+      message.error(error.message || '获取连胜数据失败')
+    },
   })
 
   // 获取月份打卡记录
@@ -35,6 +38,9 @@ export const StudyCalendar: React.FC = () => {
         newMap.set(item.date, item)
       })
       setMonthLogsMap(newMap)
+    },
+    onError: (error) => {
+      message.error(error.message || '获取打卡记录失败')
     },
   })
 

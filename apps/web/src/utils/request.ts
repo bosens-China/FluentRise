@@ -100,7 +100,7 @@ request.interceptors.request.use(
 // 响应拦截器 - 处理 Token 刷新
 request.interceptors.response.use(
   (response: AxiosResponse) => response.data,
-  async (error: AxiosError<{ message?: string; error?: string }>) => {
+  async (error: AxiosError<{ message?: string; error?: string; detail?: string }>) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;
     };
@@ -153,10 +153,25 @@ request.interceptors.response.use(
 
     // 统一错误处理
     const message =
+      error.response?.data?.detail ||
       error.response?.data?.message ||
       error.response?.data?.error ||
       error.message ||
       '请求失败';
+
+    // 处理用户账号异常 (被删除或禁用)
+    if (error.response?.status === 404 && message === '用户不存在') {
+      clearTokens();
+      window.location.href = '/login';
+      return Promise.reject(new Error('用户登录已失效，请重新登录'));
+    }
+
+    if (error.response?.status === 403 && message === '用户已被禁用') {
+      clearTokens();
+      window.location.href = '/login';
+      return Promise.reject(new Error('当前账号已被禁用，请联系管理员'));
+    }
+
     return Promise.reject(new Error(message));
   },
 );

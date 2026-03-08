@@ -72,6 +72,9 @@ function ArticlePage() {
          if (completed) {
              message.success('恭喜完成今日学习！');
          }
+      },
+      onError: (error) => {
+        message.error(error.message || '保存进度失败');
       }
     }
   );

@@ -35,10 +35,12 @@ class CultureTip(BaseModel):
 class Exercise(BaseModel):
     """练习题"""
 
-    type: str = Field(..., description="题目类型: choice/fill/translation")
+    type: str = Field("choice", description="题目类型: 必须为 choice")
     question: str = Field(..., description="题目内容")
-    options: list[str] | None = Field(None, description="选项(选择题)")
-    answer: str | None = Field(None, description="参考答案")
+    options: list[str] = Field(
+        ..., description="4个选项，例如 ['A. ...', 'B. ...', 'C. ...', 'D. ...']"
+    )
+    answer: str = Field(..., description="正确选项的完整内容，必须与options中的一项完全匹配")
 
 
 class VocabularyWord(BaseModel):
@@ -64,7 +66,7 @@ class ArticleContent(BaseModel):
     content: list[BilingualContent] = Field(..., description="双语对照内容(段落列表)")
     grammar: list[GrammarPoint] = Field(..., description="语法讲解")
     tips: list[CultureTip] = Field(..., description="文化差异Tips")
-    exercises: list[Exercise] = Field(..., description="课后练习")
+    exercises: list[Exercise] | None = Field(None, description="课后练习")
 
 
 # ============ API 请求/响应 ============
@@ -83,7 +85,7 @@ class ArticleResponse(BaseModel):
     content: list[BilingualContent]
     grammar: list[GrammarPoint]
     tips: list[CultureTip]
-    exercises: list[Exercise]
+    exercises: list[Exercise] | None
     is_read: int
     is_completed: bool
     created_at: datetime.datetime

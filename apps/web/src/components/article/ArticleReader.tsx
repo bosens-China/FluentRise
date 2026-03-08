@@ -38,7 +38,7 @@ interface ArticleReaderProps {
 }
 
 export function ArticleReader({ article, onProgressUpdate }: ArticleReaderProps) {
-  const [activeTab, setActiveTab] = useState('grammar');
+  const [activeTab, setActiveTab] = useState('vocabulary');
   const [showChinese, setShowChinese] = useState(true);
   const [exerciseAnswers, setExerciseAnswers] = useState<Record<number, string>>({});
   const [showAnswers, setShowAnswers] = useState<Record<number, boolean>>({});
@@ -135,6 +135,28 @@ export function ArticleReader({ article, onProgressUpdate }: ArticleReaderProps)
     setIsPlaying(false);
   };
 
+  const audioCache = useRef<Record<string, HTMLAudioElement>>({});
+
+  const playSingleTTS = (text: string) => {
+    if (audioCache.current[text]) {
+      const audio = audioCache.current[text];
+      audio.currentTime = 0;
+      audio.play().catch(e => {
+        console.error("Audio play failed:", e);
+        message.error("播放音频失败");
+      });
+      return;
+    }
+
+    const url = `/api/v1/system/tts?text=${encodeURIComponent(text)}`;
+    const audio = new Audio(url);
+    audioCache.current[text] = audio;
+    audio.play().catch(e => {
+      console.error("Audio play failed:", e);
+      message.error("播放音频失败");
+    });
+  };
+
   // 高亮带有生词的英文段落
   const renderEnParagraph = (text: string) => {
     if (!article.vocabulary || article.vocabulary.length === 0) return text;
@@ -196,7 +218,15 @@ export function ArticleReader({ article, onProgressUpdate }: ArticleReaderProps)
                 className="rounded-2xl border border-indigo-50 bg-white p-5 shadow-[0_4px_20px_rgba(0,0,0,0.02)] transition-all hover:shadow-[0_4px_24px_rgba(0,0,0,0.06)]"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <div className="font-bold text-indigo-700 text-xl">{vocab.word}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="font-bold text-indigo-700 text-xl">{vocab.word}</div>
+                    <Button 
+                      type="text" 
+                      icon={<SoundOutlined className="text-indigo-400 hover:text-indigo-600" />} 
+                      size="small" 
+                      onClick={() => playSingleTTS(vocab.word)}
+                    />
+                  </div>
                 </div>
                 {(vocab.uk_phonetic || vocab.us_phonetic) && (
                   <div className="flex flex-wrap gap-3 mb-3 text-sm text-gray-500 font-mono">
@@ -515,6 +545,18 @@ export function ArticleReader({ article, onProgressUpdate }: ArticleReaderProps)
                       {paragraph.zh}
                     </Paragraph>
                   )}
+                  
+                  {/* 单句朗读按钮 */}
+                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Tooltip title="朗读此段">
+                      <Button
+                        type="text"
+                        icon={<SoundOutlined className="text-lg text-indigo-500" />}
+                        onClick={() => playSingleTTS(paragraph.en)}
+                        className="bg-white/80 hover:bg-white shadow-sm"
+                      />
+                    </Tooltip>
+                  </div>
                 </div>
               ))}
             </div>
