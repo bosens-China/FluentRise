@@ -1,0 +1,170 @@
+# GitHub Actions 工作流：构建并推送 Docker 镜像到 Docker Hub
+# 触发条件：推送到 main 分支、发布 release、或手动触发
+name: Build and Push Docker Images
+
+on:
+  # 推送到 main 分支时触发
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'apps/backend/**'
+      - 'apps/web/**'
+      - '.github/workflows/docker-build-push.yml'
+  
+  # 发布 release 时触发
+  release:
+    types:
+      - published
+  
+  # 手动触发
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '镜像标签 (默认: latest)'
+        required: false
+        default: 'latest'
+
+# 权限配置
+permissions:
+  contents: read
+  packages: write
+
+# 并发控制，避免同时运行多个构建
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# 环境变量
+env:
+  REGISTRY: docker.io
+  BACKEND_IMAGE: boses/fluentrise-backend
+  WEB_IMAGE: boses/fluentrise-web
+
+jobs:
+  # 构建并推送后端镜像
+  build-backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          # 启用 BuildKit 缓存
+          buildkitd-flags: --debug
+
+      - name: 登录 Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 提取元数据（标签和标签）
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.BACKEND_IMAGE }}
+          tags: |
+            # 分支名标签
+            type=ref,event=branch
+            # Release 标签
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # 手动触发的标签
+            type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            # SHA 短标签
+            type=sha,prefix=,suffix=,format=short
+            # 最新标签（仅 main 分支）
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+
+      - name: 构建并推送后端镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/backend/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # 缓存配置（GitHub Actions 缓存）
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+          # 构建参数
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+  # 构建并推送前端镜像
+  build-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-flags: --debug
+
+      - name: 登录 Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 提取元数据（标签和标签）
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.WEB_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=sha,prefix=,suffix=,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+
+      - name: 构建并推送前端镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/web/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  # 通知任务（构建完成后执行）
+  notify:
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-web]
+    if: always()
+    
+    steps:
+      - name: 构建结果通知
+        run: |
+          if [ "${{ needs.build-backend.result }}" == "success" ] && [ "${{ needs.build-web.result }}" == "success" ]; then
+            echo "✅ 所有镜像构建并推送成功！"
+            echo "后端镜像: ${{ env.BACKEND_IMAGE }}"
+            echo "前端镜像: ${{ env.WEB_IMAGE }}"
+          else
+            echo "❌ 构建失败"
+            exit 1
+          fi

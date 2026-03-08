@@ -1,0 +1,111 @@
+# ==========================================
+# FluentRise Monorepo 全局 .dockerignore
+# 适用于前端和后端，因为 Docker 构建上下文在根目录
+# ==========================================
+
+# Git & System
+.git
+.gitignore
+.gitattributes
+**/.DS_Store
+**/Thumbs.db
+
+# IDE & Editors
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+*~
+.editorconfig
+
+# 文档 (通常不打包进运行环境，除了 README)
+*.md
+!README.md
+!apps/*/README.md
+
+# CI/CD
+.github/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# 环境变量 (安全：不要将本地 .env 泄露进镜像)
+.env
+.env.*
+
+# 日志与临时文件
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+tmp/
+temp/
+*.tmp
+
+# ========================
+# 前端 (Node.js & Web)
+# ========================
+**/node_modules/
+dist/
+dist-ssr/
+build/
+.cache/
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+*.map
+
+# 测试 (不打包测试代码)
+tests/
+test/
+coverage/
+__tests__/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# ========================
+# 后端 (Python)
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 虚拟环境 (千万别打包进镜像)
+venv/
+.venv/
+env/
+ENV/
+
+# Python 构建与缓存
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+docs/
+
+# 本地数据库文件
+*.db
+*.sqlite3

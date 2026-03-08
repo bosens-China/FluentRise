@@ -1,0 +1,139 @@
+version: '3.8'
+
+# ============================================================
+# FluentRise 生产环境 Docker Compose 配置
+# ============================================================
+# 使用前请确保已设置所有必需的环境变量
+# 建议创建 .env 文件并填写以下变量：
+# -----------------------------------------------------------
+# DATABASE_URL=postgresql://用户:密码@postgres:5432/数据库名
+# REDIS_URL=redis://redis:6379/0
+# SECRET_KEY=你的JWT密钥（至少32位随机字符串）
+# OPENAI_API_KEY=你的OpenAI API密钥
+# DOCKERHUB_USERNAME=boses
+# ============================================================
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:16-alpine
+    container_name: fluentrise_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fluentrise}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-fluentrise_db}
+      TZ: Asia/Shanghai
+      PGTZ: Asia/Shanghai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-fluentrise} -d ${POSTGRES_DB:-fluentrise_db}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fluentrise_network
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: fluentrise_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - redis_data:/data
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - fluentrise_network
+
+  # 后端 API 服务
+  backend:
+    image: ${DOCKERHUB_USERNAME:-boses}/fluentrise-backend:latest
+    container_name: fluentrise_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # 【必需】数据库连接字符串
+      DATABASE_URL: ${DATABASE_URL}
+      
+      # 【必需】Redis 连接字符串
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      
+      # 【必需】JWT 密钥，用于加密令牌（请使用强密码）
+      SECRET_KEY: ${SECRET_KEY}
+      
+      # 【可选】访问令牌过期时间（分钟）
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      
+      # 【必需】OpenAI API 密钥
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      
+      # 【可选】OpenAI API 基础 URL
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      
+      # 【可选】OpenAI 模型
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      
+      # 【可选】环境模式
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      
+      # 【可选】日志级别
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      
+      # 时区
+      TZ: Asia/Shanghai
+    ports:
+      - '${BACKEND_PORT:-8000}:8000'
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - fluentrise_network
+
+  # 前端 Web 服务
+  web:
+    image: ${DOCKERHUB_USERNAME:-boses}/fluentrise-web:latest
+    container_name: fluentrise_web
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      # 【可选】后端 API 地址（用于 Nginx 反向代理）
+      # 用于在生产环境中将 /api/ 前缀的请求代理到后端服务
+      API_URL: ${API_URL:-http://backend:8000}
+      
+      # 时区
+      TZ: Asia/Shanghai
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    networks:
+      - fluentrise_network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  fluentrise_network:
+    driver: bridge
