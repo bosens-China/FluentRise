@@ -25,7 +25,6 @@ import { AssessmentModal } from '@/components/assessment';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { StudyCalendar } from '@/components/studyLog/StudyCalendar';
 import {
-  generateTodayArticle,
   getTodayArticle,
   type Article,
 } from '@/api/article';
@@ -76,7 +75,7 @@ function HomePage() {
     setShowAssessment(false);
     refresh();
     message.success('评估完成！已为你定制学习计划');
-    handleGenerateArticle();
+    navigate({ to: '/article/$articleId', params: { articleId: 'today' } });
   };
 
   const { loading: loadingArticle, run: fetchTodayArticle } = useRequest(
@@ -87,22 +86,6 @@ function HomePage() {
         if (data.has_article && data.article) {
           setTodayArticle(data.article);
         }
-      },
-    }
-  );
-
-  const { loading: generatingArticle, run: handleGenerateArticle } = useRequest(
-    generateTodayArticle,
-    {
-      manual: true,
-      onSuccess: (article) => {
-        setTodayArticle(article);
-        message.success('今日学习文章已生成！');
-        navigate({ to: '/article/$articleId', params: { articleId: String(article.id) } });
-      },
-      onError: (error) => {
-        message.error('文章生成失败，请稍后重试');
-        console.error(error);
       },
     }
   );
@@ -223,7 +206,7 @@ function HomePage() {
                   })
                 }
               >
-                {todayArticle.is_read >= 100 ? '复习文章' : '开始学习'}
+                {todayArticle.is_read >= 100 ? '复习文章' : '继续学习'}
               </Button>
             </div>
             <div className="flex justify-center sm:px-8">
@@ -262,11 +245,11 @@ function HomePage() {
               type="primary"
               size="large"
               shape="round"
-              loading={generatingArticle || loadingArticle}
-              onClick={() => handleGenerateArticle()}
+              loading={loadingArticle}
+              onClick={() => navigate({ to: '/article/$articleId', params: { articleId: 'today' } })}
               className="h-12 px-8 font-bold shadow-md shadow-indigo-200"
             >
-              生成今日文章
+              开始今日学习
             </Button>
           </div>
         )}

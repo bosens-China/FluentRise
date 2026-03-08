@@ -97,69 +97,89 @@ async def generate_today_article(
             detail="请先完成英语水平评估",
         )
 
-    # 生成新文章
-    try:
-        # 读取用户属性并转换类型
-        raw_level = current_user.english_level
-        raw_goals = current_user.learning_goals
-        raw_custom = current_user.custom_goal
+    # 引入 redis 进行分布式锁，防止缓存击穿（并发多次调用OpenAI）
 
-        user_level_val: int = int(raw_level) if raw_level is not None else 0  # type: ignore
-        learning_goals_val: list[str] = raw_goals if isinstance(raw_goals, list) else []  # type: ignore
-        custom_goal_val: str | None = str(raw_custom) if raw_custom else None  # type: ignore
+    from app.db.redis import get_redis
 
-        generated = await article_generator.generate(
-            user_level=user_level_val,
-            learning_goals=learning_goals_val,
-            custom_goal=custom_goal_val,
-            target_date=target_date,
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"文章生成失败: {str(e)}",
-        ) from e
+    redis_client = await get_redis()
+    lock_key = f"lock:generate_article:{current_user.id}:{target_date}"
 
-    # 删除旧文章（如果存在）
-    if existing:
-        await db.delete(existing)
-        await db.flush()
-
-    # 创建新文章
-    article = Article(
-        user_id=current_user.id,
-        title=generated.title,
-        publish_date=target_date,
-        level=generated.level,
-        source_book=generated.source_book,
-        source_lesson=generated.source_lesson,
-        vocabulary=[v.model_dump() for v in generated.vocabulary],
-        content=[c.model_dump() for c in generated.content],
-        grammar=[g.model_dump() for g in generated.grammar],
-        tips=[t.model_dump() for t in generated.tips],
-        exercises=[e.model_dump() for e in generated.exercises],
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
-    )
-
-    db.add(article)
-    try:
-        await db.commit()
-        await db.refresh(article)
-    except IntegrityError:
-        # 并发请求下可能触发唯一约束冲突，回退并返回已存在记录
-        await db.rollback()
-        retry = await db.execute(
+    # 尝试获取锁，设置过期时间防止死锁
+    # timeout: 锁最大存活时间（秒），blocking_timeout: 获取锁的最大等待时间（秒）
+    async with redis_client.lock(lock_key, timeout=120, blocking_timeout=120):
+        # 获取到锁后，再次检查是否已经有生成的文章了 (Double Check)
+        retry_result = await db.execute(
             select(Article)
             .where(Article.user_id == current_user.id)
             .where(Article.publish_date == target_date)
         )
-        existing_after_race = retry.scalar_one_or_none()
-        if existing_after_race is not None:
-            return existing_after_race
-        raise
+        existing_after_lock = retry_result.scalar_one_or_none()
+        if existing_after_lock and not force_regenerate:
+            return existing_after_lock
 
-    return article
+        # 生成新文章
+        try:
+            # 读取用户属性并转换类型
+            raw_level = current_user.english_level
+            raw_goals = current_user.learning_goals
+            raw_custom = current_user.custom_goal
+
+            user_level_val: int = int(raw_level) if raw_level is not None else 0  # type: ignore
+            learning_goals_val: list[str] = raw_goals if isinstance(raw_goals, list) else []  # type: ignore
+            custom_goal_val: str | None = str(raw_custom) if raw_custom else None  # type: ignore
+
+            generated = await article_generator.generate(
+                user_level=user_level_val,
+                learning_goals=learning_goals_val,
+                custom_goal=custom_goal_val,
+                target_date=target_date,
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"文章生成失败: {str(e)}",
+            ) from e
+
+        # 删除旧文章（如果存在）
+        if existing:
+            await db.delete(existing)
+            await db.flush()
+
+        # 创建新文章
+        article = Article(
+            user_id=current_user.id,
+            title=generated.title,
+            publish_date=target_date,
+            level=generated.level,
+            source_book=generated.source_book,
+            source_lesson=generated.source_lesson,
+            vocabulary=[v.model_dump() for v in generated.vocabulary],
+            content=[c.model_dump() for c in generated.content],
+            grammar=[g.model_dump() for g in generated.grammar],
+            tips=[t.model_dump() for t in generated.tips],
+            exercises=[e.model_dump() for e in generated.exercises],
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+
+        db.add(article)
+        try:
+            await db.commit()
+            await db.refresh(article)
+        except IntegrityError:
+            # 并发请求下可能触发唯一约束冲突，回退并返回已存在记录
+            await db.rollback()
+            retry = await db.execute(
+                select(Article)
+                .where(Article.user_id == current_user.id)
+                .where(Article.publish_date == target_date)
+            )
+            existing_after_race = retry.scalar_one_or_none()
+            if existing_after_race is not None:
+                return existing_after_race
+            raise
+
+        return article
 
 
 @router.get("/history", response_model=ArticleListResponse)
