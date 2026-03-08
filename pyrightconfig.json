@@ -1,0 +1,15 @@
+{
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": false,
+  "reportMissingImports": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownVariableType": false,
+  "reportUnknownArgumentType": false,
+  "reportUnusedImport": "warning",
+  "reportUnusedVariable": "warning",
+  "useLibraryCodeForTypes": true,
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+  ]
+}

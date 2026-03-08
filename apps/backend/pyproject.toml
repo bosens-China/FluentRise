@@ -1,0 +1,59 @@
+[project]
+name = "fluentrise-backend"
+version = "0.1.0"
+description = "FluentRise 学习平台后端服务"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.17",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+    "redis>=5.2.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "langchain>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "langchain-community>=0.3.0",
+    "openai>=1.55.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.27.0",
+    "email-validator>=2.2.0",
+    "phonenumbers>=8.13.0",
+    "edge-tts>=7.2.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.8.0",
+    "pyright>=1.1.389",
+]
+
+# Ruff 最小化配置
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+
+# uv 任务脚本 - 需要安装: uv pip install taskipy
+[tool.taskipy.tasks]
+dev = "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+start = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+lint = "ruff check . --fix"
+format = "ruff format ."
+typecheck = "pyright"
+
+[dependency-groups]
+dev = ["pyright>=1.1.408", "taskipy>=1.14.1"]

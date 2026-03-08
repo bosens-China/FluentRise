@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:16-alpine
+    container_name: fluentrise_postgres
+    environment:
+      POSTGRES_USER: fluentrise
+      POSTGRES_PASSWORD: dev_password_8847
+      POSTGRES_DB: fluentrise_db
+    ports:
+      - '54327:5432' # 随机端口，避免冲突
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fluentrise -d fluentrise_db']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis 缓存（用于验证码等）
+  redis:
+    image: redis:7-alpine
+    container_name: fluentrise_redis
+    ports:
+      - '6381:6379' # 随机端口
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:

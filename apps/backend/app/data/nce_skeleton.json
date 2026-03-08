@@ -1,0 +1,107 @@
+{
+  "description": "新概念英语课文骨架 - 用于AI生成个性化文章",
+  "books": [
+    {
+      "book": 1,
+      "level_range": [0, 2],
+      "description": "初级 - 日常生活对话",
+      "lessons": [
+        {"lesson": 1, "title": "Excuse me!", "grammar": ["be动词", "人称代词"], "theme": "日常问候", "vocab_focus": ["excuse", "me", "yes", "is", "this", "your"]},
+        {"lesson": 5, "title": "Nice to meet you", "grammar": ["国籍表达", "be动词"], "theme": "自我介绍", "vocab_focus": ["good", "morning", "miss", "new", "student", "French", "German"]},
+        {"lesson": 9, "title": "How are you today?", "grammar": ["问候语", "形容词"], "theme": "问候健康", "vocab_focus": ["hello", "hi", "how", "today", "fine", "thanks"]},
+        {"lesson": 13, "title": "A new dress", "grammar": ["所有格", "颜色"], "theme": "物品描述", "vocab_focus": ["colour", "green", "come", "upstairs", "smart", "hat"]},
+        {"lesson": 17, "title": "How do you do?", "grammar": ["介绍他人", "职务表达"], "theme": "正式介绍", "vocab_focus": ["employee", "hard-working", "sales reps", "man", "office"]},
+        {"lesson": 21, "title": "Which book?", "grammar": ["指示代词", "give句型"], "theme": "请求物品", "vocab_focus": ["give", "which", "book", "large", "small"]},
+        {"lesson": 25, "title": "Mrs. Smith's Kitchen", "grammar": ["there be句型", "方位介词"], "theme": "描述房间", "vocab_focus": ["kitchen", "refrigerator", "electric", "left", "right", "middle"]},
+        {"lesson": 31, "title": "Where's Sally?", "grammar": ["现在进行时", "方位介词"], "theme": "描述动作", "vocab_focus": ["garden", "under", "tree", "climb", "who", "run"]},
+        {"lesson": 35, "title": "Our village", "grammar": ["there be复数", "方位表达"], "theme": "描述地点", "vocab_focus": ["photograph", "village", "valley", "between", "hill", "bank"]},
+        {"lesson": 41, "title": "Penny's bag", "grammar": ["所有格", "数量词"], "theme": "物品清单", "vocab_focus": ["cheese", "bread", "soap", "chocolate", "sugar", "coffee"]},
+        {"lesson": 45, "title": "The boss's letter", "grammar": ["can/can't", "动词"], "theme": "能力表达", "vocab_focus": ["can", "lift", "cake", "biscuit"]},
+        {"lesson": 49, "title": "At the butcher's", "grammar": ["数量词", "购物用语"], "theme": "购物场景", "vocab_focus": ["butcher", "meat", "beef", "lamb", "husband", "steak"]},
+        {"lesson": 53, "title": "An interesting climate", "grammar": ["季节表达", "天气词汇"], "theme": "谈论天气", "vocab_focus": ["mild", "always", "north", "east", "wet", "west"]},
+        {"lesson": 57, "title": "An unusual day", "grammar": ["时间表达", "日常活动"], "theme": "描述日常", "vocab_focus": ["o'clock", "shop", "moment", "usual"]},
+        {"lesson": 61, "title": "A bad cold", "grammar": ["疾病表达", "建议用语"], "theme": "健康话题", "vocab_focus": ["feel", "look", "call", "doctor", "telephone", "remember"]},
+        {"lesson": 65, "title": "Not a baby", "grammar": ["时间表达", "年龄"], "theme": "生日话题", "vocab_focus": ["party", "thirsty", "water", "milk", "tea"]},
+        {"lesson": 69, "title": "The car race", "grammar": ["过去时", "比赛用语"], "theme": "竞赛活动", "vocab_focus": ["year", "race", "town", "crowd", "stand", "exciting"]},
+        {"lesson": 73, "title": "The way to King Street", "grammar": ["问路与指路", "方位介词"], "theme": "问路场景", "vocab_focus": ["week", "London", "suddenly", "way", "street"]},
+        {"lesson": 77, "title": "Terrible toothache", "grammar": ["预约表达", "时间"], "theme": "就医场景", "vocab_focus": ["appointment", "urgent", "till", "minute"]},
+        {"lesson": 81, "title": "Roast beef and potatoes", "grammar": ["饮食习惯", " already/yet"], "theme": "餐饮话题", "vocab_focus": ["lunch", "dinner", "restaurant", "roast", "breakfast"]},
+        {"lesson": 85, "title": "Paris in the spring", "grammar": ["巴黎风情", "have been"], "theme": "旅行经历", "vocab_focus": ["Paris", "cinema", "film", "beautiful", "city"]},
+        {"lesson": 89, "title": "For sale", "grammar": ["出售表达", "房屋描述"], "theme": "房产话题", "vocab_focus": ["believe", "may", "sale", "since", "why"]}
+      ]
+    },
+    {
+      "book": 2,
+      "level_range": [2, 4],
+      "description": "初中级 - 语法渐进发展",
+      "lessons": [
+        {"lesson": 1, "title": "A private conversation", "grammar": ["过去进行时", "情态动词could"], "theme": "公共场所行为", "vocab_focus": ["private", "conversation", "theatre", "seat", "play", "loudly"]},
+        {"lesson": 3, "title": "Please send me a card", "grammar": ["动词不定式", "并列句"], "theme": "旅行经历", "vocab_focus": ["send", "card", "spoil", "museum", "public", "friendly"]},
+        {"lesson": 5, "title": "No wrong numbers", "grammar": ["现在完成时", "pigeon"], "theme": "通讯方式", "vocab_focus": ["pigeon", "message", "cover", "distance", "request", "spare"]},
+        {"lesson": 7, "title": "Too late", "grammar": ["过去完成时", "时间状语从句"], "theme": "侦探故事", "vocab_focus": ["detective", "airport", "expect", "valuable", "parcel", "steal"]},
+        {"lesson": 9, "title": "A cold welcome", "grammar": ["倒装句", "时间表达"], "theme": "节日活动", "vocab_focus": ["welcome", "crowd", "gather", "shout", "refuse", "laugh"]},
+        {"lesson": 11, "title": "One good turn deserves another", "grammar": ["间接引语", "情态动词"], "theme": "人际关系", "vocab_focus": ["turn", "deserve", "immediately", "return", "favor"]},
+        {"lesson": 13, "title": "The Greenwood Boys", "grammar": ["将来进行时", "演出"], "theme": "娱乐活动", "vocab_focus": ["group", "pop", "occasion", "present", "performance"]},
+        {"lesson": 15, "title": "Good news", "grammar": ["间接引语(疑问)", "时态呼应"], "theme": "职场场景", "vocab_focus": ["news", "secretary", "nervous", "afford", "weak", "interrupt"]},
+        {"lesson": 17, "title": "Always young", "grammar": ["现在完成进行时", "年龄"], "theme": "演员生活", "vocab_focus": ["appear", "stage", "actress", "at least", "in spite of"]},
+        {"lesson": 19, "title": "Sold out", "grammar": ["情态动词may/might", "订票"], "theme": "购票场景", "vocab_focus": ["hurry", "ticket", "sold out", "may", "might"]},
+        {"lesson": 21, "title": "One man in a boat", "grammar": ["动名词", "钓鱼"], "theme": "爱好活动", "vocab_focus": ["catch", "fishing", "waste", "realize", "actually"]},
+        {"lesson": 23, "title": "A new house", "grammar": ["现在完成时(持续)", "将来时"], "theme": "房产描述", "vocab_focus": ["complete", "modern", "strange", "district", "retire"]},
+        {"lesson": 25, "title": "Do the English speak English?", "grammar": ["并列句", "理解困难"], "theme": "旅行趣事", "vocab_focus": ["railway", "porter", "several", "foreigner", "wonder"]},
+        {"lesson": 27, "title": "A wet night", "grammar": ["过去完成时", "露营"], "theme": "户外活动", "vocab_focus": ["tent", "field", "smell", "camping", "creep", "sleep"]},
+        {"lesson": 29, "title": "Taxi!", "grammar": ["被动语态", "巴黎出租"], "theme": "交通出行", "vocab_focus": ["taxi", "land", "plenty", "Paris", "charge", "knowledge"]},
+        {"lesson": 31, "title": "Success story", "grammar": ["一般过去时", "成功经历"], "theme": "人生经历", "vocab_focus": ["retire", "company", "bicycle", "save", "share"]},
+        {"lesson": 33, "title": "Out of the darkness", "grammar": ["时间状语从句", "事故"], "theme": "海上故事", "vocab_focus": ["darkness", "explain", "coast", "storm", "towards", "climb"]},
+        {"lesson": 35, "title": "Stop thief!", "grammar": ["过去进行时", "犯罪"], "theme": "捉贼故事", "vocab_focus": ["while", "suddenly", "brave", "thief", "through", "capture"]},
+        {"lesson": 37, "title": "The Olympic Games", "grammar": ["将来时", "被动语态"], "theme": "体育赛事", "vocab_focus": ["Olympic", "hold", "thousand", "standard", "capital"]},
+        {"lesson": 39, "title": "Am I all right?", "grammar": ["疑问句", "医患对话"], "theme": "医疗场景", "vocab_focus": ["while", "regain", "operation", "following", "patient"]},
+        {"lesson": 41, "title": "Do you call that a hat?", "grammar": ["do强调", "购物"], "theme": "夫妻对话", "vocab_focus": ["must", "notice", "window", "outside", "post office"]},
+        {"lesson": 43, "title": "Over the South Pole", "grammar": ["一般过去时", "探险"], "theme": "探险故事", "vocab_focus": ["pole", "flight", "explorer", "lie", "serious", "point"]},
+        {"lesson": 45, "title": "Through the forest", "grammar": ["介词短语", "方向"], "theme": "森林迷路", "vocab_focus": ["forest", "risk", "picnic", "edge", "soon"]},
+        {"lesson": 47, "title": "A thirsty ghost", "grammar": ["情态动词can/could", "鬼故事"], "theme": "鬼屋故事", "vocab_focus": ["thirsty", "ghost", "shut", "until", "wine", "again"]},
+        {"lesson": 49, "title": "The end of a dream", "grammar": ["过去完成时", "事故"], "theme": "飞机故障", "vocab_focus": ["tired", "sleep", "earth", "arouse", "snake", "jump"]},
+        {"lesson": 51, "title": "Reward for virtue", "grammar": ["现在完成时", "减肥"], "theme": "减肥话题", "vocab_focus": ["reward", "virtue", "diet", "forbid", "embarrass"]},
+        {"lesson": 53, "title": "Hot snake", "grammar": ["因果关系", "电力"], "theme": "技术故障", "vocab_focus": ["cause", "examine", "accidentally", "remain", "wire"]},
+        {"lesson": 55, "title": "Not a gold mine", "grammar": ["过去完成时", "寻宝"], "theme": "探宝故事", "vocab_focus": ["gold", "mine", "treasure", "reveal", "increase"]}
+      ]
+    },
+    {
+      "book": 3,
+      "level_range": [4, 5],
+      "description": "中级 - 议论文与说明文",
+      "lessons": [
+        {"lesson": 1, "title": "A Puma at large", "grammar": ["现在完成时", "定语从句"], "theme": "动物话题", "vocab_focus": ["puma", "spot", "evidence", "accumulate", "oblige", "hunt"]},
+        {"lesson": 3, "title": "An unknown goddess", "grammar": ["被动语态", "考古"], "theme": "考古发现", "vocab_focus": ["ancient", "archaeologist", "explore", "promontory", "prosperous"]},
+        {"lesson": 5, "title": "The facts", "grammar": ["间接引语", "时态"], "theme": "媒体报道", "vocab_focus": ["editor", "extreme", "statistics", "journalist", "publish"]},
+        {"lesson": 7, "title": "Too early", "grammar": ["过去完成时", "时间状语"], "theme": "误会故事", "vocab_focus": ["lighthouse", "warn", "strike", "take part in"]},
+        {"lesson": 9, "title": "Flying cats", "grammar": ["猫的超能力", "定语从句"], "theme": "动物行为", "vocab_focus": ["fascinate", "affectionate", "mysterious", "suburb", "inhabitant"]},
+        {"lesson": 11, "title": "Not guilty", "grammar": ["否定", "海关"], "theme": "海关通关", "vocab_focus": ["guilty", "customs", "dreadful", "confident", "officer"]},
+        {"lesson": 13, "title": "It's only me", "grammar": ["化妆", "表语从句"], "theme": "化妆误会", "vocab_focus": ["costume", "consist of", "wreathe", "present", "creep"]},
+        {"lesson": 15, "title": "Fifty pence worth of trouble", "grammar": ["过去完成时", "幽默"], "theme": "童年趣事", "vocab_focus": ["appreciate", "pocket money", "rattle", "thrifty", "value"]},
+        {"lesson": 17, "title": "The longest suspension bridge", "grammar": ["最高级", "工程"], "theme": "建筑介绍", "vocab_focus": ["suspension", "immortal", "estimate", "capacity", "span"]},
+        {"lesson": 19, "title": "A very dear cat", "grammar": ["情态动词", "绑架"], "theme": "宠物故事", "vocab_focus": ["dear", "kidnapper", "considerable", "wealthy", "ransom"]},
+        {"lesson": 21, "title": "Daniel Mendoza", "grammar": ["过去时", "人物传记"], "theme": "历史人物", "vocab_focus": ["boxing", "popularity", "crude", "marquis", "technically"]},
+        {"lesson": 23, "title": "One man's meat is another man's poison", "grammar": ["比较", "饮食习惯"], "theme": "饮食偏好", "vocab_focus": ["poison", "illogical", "repulsive", "instinct", "overrate"]},
+        {"lesson": 25, "title": "A skeleton in the cupboard", "grammar": ["习语", "家庭秘密"], "theme": "家庭话题", "vocab_focus": ["skeleton", "seemingly", "respectable", "conceal", "nagging"]},
+        {"lesson": 27, "title": "The 'Vasa'", "grammar": ["被动语态", "历史事件"], "theme": "沉船故事", "vocab_focus": ["galleon", "flagship", "mighty", "ornament", " hull"]}
+      ]
+    },
+    {
+      "book": 4,
+      "level_range": [5, 6],
+      "description": "高级 - 学术与文学",
+      "lessons": [
+        {"lesson": 1, "title": "Finding fossil man", "grammar": ["定语从句", "考古学"], "theme": "人类学", "vocab_focus": ["fossil", "anthropologist", "archaeological", "ancestor", "rot"]},
+        {"lesson": 3, "title": "Matterhorn man", "grammar": ["登山", "定语从句"], "theme": "登山运动", "vocab_focus": ["alpinist", "summit", "attain", "shelter", "precipitous"]},
+        {"lesson": 5, "title": "Youth", "grammar": ["抽象概念", "文学"], "theme": "青春话题", "vocab_focus": ["youth", "preparation", "temperamental", "proverb", "foresight"]},
+        {"lesson": 7, "title": "The sporting spirit", "grammar": ["议论文", "体育精神"], "theme": "体育评论", "vocab_focus": ["sportsmanship", "goodwill", "keen", "incline", "dispute"]},
+        {"lesson": 9, "title": "Royal espionage", "grammar": ["历史", "过去时"], "theme": "历史故事", "vocab_focus": ["espionage", "eminent", "occurrence", "scrutinize", "accumulate"]},
+        {"lesson": 11, "title": "How to grow old", "grammar": ["建议", "哲学"], "theme": "人生哲学", "vocab_focus": ["psychological", "mammal", "sympathetic", "solitude", "anguish"]},
+        {"lesson": 13, "title": "The search for oil", "grammar": ["说明文", "地质"], "theme": "石油勘探", "vocab_focus": ["controversial", "pursue", "encounter", "geologist", "diameter"]},
+        {"lesson": 15, "title": "The Butterfly Effect", "grammar": ["科学概念", "复杂句"], "theme": "科学理论", "vocab_focus": ["meteorologist", "forecast", "multiply", "deviation", "disastrous"]},
+        {"lesson": 17, "title": "A man-made disease", "grammar": ["医学", "因果"], "theme": "医学历史", "vocab_focus": ["rabies", "epidemic", "loathsome", "provoke", "symptom"]},
+        {"lesson": 19, "title": "The future of the silences", "grammar": ["环保", "预测"], "theme": "环境保护", "vocab_focus": ["silence", "primitive", "savage", "descendant", "nuclear"]}
+      ]
+    }
+  ]
+}
