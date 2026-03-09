@@ -205,5 +205,60 @@ class TTSService:
 
         return audio_bytes
 
+    async def warmup_article_audio(self, article_id: int, article: "ArticleContent") -> None:
+        """
+        异步预热文章音频，带分布式锁防止缓存击穿
+
+        适用于文章生成后后台预热，不阻塞主流程
+        """
+        import logging
+
+        from app.db.redis import get_redis
+
+        logger = logging.getLogger(__name__)
+        redis_client = await get_redis()
+        lock_key = f"lock:tts:warmup:{article_id}"
+        cache_key = f"tts:article:{article_id}"
+
+        # 先检查是否已缓存
+        cached = await redis_client.execute_command("GET", cache_key)
+        if cached:
+            logger.debug(f"[TTS Warmup] Article {article_id} already cached, skipping")
+            return
+
+        # 尝试获取分布式锁，防止多个进程同时预热同一文章
+        # 锁超时 5 分钟，足够生成音频
+        lock = redis_client.lock(lock_key, timeout=300, blocking_timeout=0)
+        acquired = await lock.acquire(blocking=False)
+
+        if not acquired:
+            logger.debug(
+                f"[TTS Warmup] Another process is warming up article {article_id}, skipping"
+            )
+            return
+
+        try:
+            logger.info(f"[TTS Warmup] Starting warmup for article {article_id}")
+
+            # 再次检查（Double Check）
+            cached_after_lock = await redis_client.execute_command("GET", cache_key)
+            if cached_after_lock:
+                logger.debug(f"[TTS Warmup] Article {article_id} cached after lock, skipping")
+                return
+
+            # 异步生成音频
+            await self.generate_article_audio_bytes(article, article_id)
+            logger.info(f"[TTS Warmup] Completed warmup for article {article_id}")
+
+        except Exception as e:
+            logger.warning(f"[TTS Warmup] Failed to warmup article {article_id}: {e}")
+            # 预热失败不影响主流程，只是用户首次播放可能需要等待
+        finally:
+            # 确保释放锁
+            try:
+                await lock.release()
+            except Exception:
+                pass
+
 
 tts_service = TTSService()

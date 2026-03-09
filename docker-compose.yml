@@ -30,7 +30,11 @@ services:
     ports:
       - '${POSTGRES_PORT:-5432}:5432'
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-fluentrise} -d ${POSTGRES_DB:-fluentrise_db}']
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER:-fluentrise} -d ${POSTGRES_DB:-fluentrise_db}',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -70,31 +74,25 @@ services:
     environment:
       # 【必需】数据库连接字符串
       DATABASE_URL: ${DATABASE_URL}
-      
+
       # 【必需】Redis 连接字符串
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      
+
       # 【必需】JWT 密钥，用于加密令牌（请使用强密码）
       SECRET_KEY: ${SECRET_KEY}
-      
+
       # 【可选】访问令牌过期时间（分钟）
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
-      
+
       # 【必需】OpenAI API 密钥
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      
-      # 【可选】OpenAI API 基础 URL
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-      
-      # 【可选】OpenAI 模型
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-      
+
       # 【可选】环境模式
       ENVIRONMENT: ${ENVIRONMENT:-production}
-      
+
       # 【可选】日志级别
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      
+
       # 时区
       TZ: Asia/Shanghai
     ports:
@@ -120,7 +118,7 @@ services:
       # 【可选】后端 API 地址（用于 Nginx 反向代理）
       # 用于在生产环境中将 /api/ 前缀的请求代理到后端服务
       API_URL: ${API_URL:-http://backend:8000}
-      
+
       # 时区
       TZ: Asia/Shanghai
     ports:

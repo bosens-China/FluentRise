@@ -32,8 +32,8 @@ class Settings(BaseSettings):
 
     # OpenAI
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o-mini"
-    OPENAI_BASE_URL: str | None = None  # 兼容 OpenAI 的第三方 API（如 DeepSeek）
+    OPENAI_MODEL: str = "deepseek-chat"
+    OPENAI_BASE_URL: str = "https://api.deepseek.com"
 
     # 验证码
     SMS_CODE_EXPIRE_SECONDS: int = 300  # 5分钟

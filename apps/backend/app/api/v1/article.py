@@ -6,6 +6,7 @@ from datetime import date, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import desc, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +44,7 @@ async def get_today_article(
     获取今日文章
 
     如果没有今日文章，返回 has_article=false
+    今日文章可能变化（生成新文章），不设置长期缓存
     """
     today = date.today()
 
@@ -187,6 +189,26 @@ async def generate_today_article(
                 return existing_after_race
             raise
 
+        # 异步预热 TTS 音频（不阻塞接口返回）
+        import asyncio
+
+        from app.schemas.article import ArticleContent as ArticleContentSchema
+        from app.services.tts_service import tts_service
+
+        article_content = ArticleContentSchema(
+            title=generated.title,
+            level=generated.level,
+            source_book=generated.source_book or 0,
+            source_lesson=generated.source_lesson or 0,
+            vocabulary=generated.vocabulary,
+            content=generated.content,
+            grammar=generated.grammar,
+            tips=generated.tips,
+            exercises=generated.exercises or [],
+        )
+        # 后台任务预热 TTS，失败不影响主流程
+        asyncio.create_task(tts_service.warmup_article_audio(article.id, article_content))
+
         return article
 
 
@@ -199,6 +221,8 @@ async def get_article_history(
 ) -> Any:
     """
     获取历史文章列表
+
+    历史列表随新文章增加而变化，不设置长期缓存
     """
     offset = (page - 1) * page_size
 
@@ -230,6 +254,8 @@ async def get_article_detail(
 ) -> Any:
     """
     获取文章详情
+
+    文章生成后内容不会变更，设置 7 天 HTTP 缓存
     """
     result = await db.execute(
         select(Article).where(Article.id == article_id).where(Article.user_id == current_user.id)
@@ -242,7 +268,12 @@ async def get_article_detail(
             detail="文章不存在",
         )
 
-    return article
+    # 返回 JSONResponse 以添加 HTTP 缓存头
+    # 文章生成后不会变更，缓存 7 天 (604800 秒)
+    return JSONResponse(
+        content=ArticleResponse.model_validate(article).model_dump(mode="json"),
+        headers={"Cache-Control": "public, max-age=604800"},
+    )
 
 
 @router.post("/{article_id}/audio")

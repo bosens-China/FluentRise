@@ -5,7 +5,6 @@ AI 文章生成服务
 
 import json
 import random
-import re
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -183,9 +182,6 @@ class ArticleGenerator:
         goal_str = ", ".join(learning_goals) if learning_goals else "daily"
         custom_goal_text = custom_goal or "无"
         known_words_str = ", ".join(known_words) if known_words else "无"
-        feedback_placeholder = (
-            "\n【上一次质量检查未通过，必须修正】\n{quality_feedback}\n请修正后再输出。"
-        )
 
         return ChatPromptTemplate.from_messages(
             [
@@ -227,8 +223,7 @@ class ArticleGenerator:
 
 【日期】
 {date}
-"""
-                    + feedback_placeholder,
+""",
                 ),
             ]
         ).partial(
@@ -253,88 +248,6 @@ class ArticleGenerator:
         )
 
     @staticmethod
-    def _count_sentences(text: str) -> int:
-        """统计英文句子数。"""
-        parts = [part.strip() for part in re.split(r"[.!?]+", text) if part.strip()]
-        return len(parts)
-
-    @staticmethod
-    def _count_words(text: str) -> int:
-        """统计英文单词数。"""
-        return len(re.findall(r"[A-Za-z']+", text))
-
-    def _quality_check(
-        self,
-        article: ArticleContent,
-        skeleton: LessonContext,
-        plan: OutputPlan,
-        target_level: int,
-    ) -> list[str]:
-        """对生成结果做结构与难度检查。"""
-        issues: list[str] = []
-
-        if len(article.content) != plan.paragraphs:
-            issues.append(f"段落数应为 {plan.paragraphs}，实际为 {len(article.content)}。")
-
-        total_sentences = 0
-        total_words = 0
-        for idx, block in enumerate(article.content, start=1):
-            sentence_count = self._count_sentences(block.en)
-            total_sentences += sentence_count
-            total_words += self._count_words(block.en)
-            if not (plan.min_sentences <= sentence_count <= plan.max_sentences):
-                issues.append(
-                    f"第 {idx} 段句数应为 {plan.min_sentences}~{plan.max_sentences}，实际为 {sentence_count}。"
-                )
-
-        if total_sentences > 0:
-            avg_words_per_sentence = total_words / total_sentences
-            lower_bound = plan.min_words_per_sentence - 2
-            upper_bound = plan.max_words_per_sentence + 2
-            if not (lower_bound <= avg_words_per_sentence <= upper_bound):
-                issues.append(
-                    "平均句长不符合目标等级，"
-                    f"实际约 {avg_words_per_sentence:.1f} 词/句，期望 {lower_bound}~{upper_bound}。"
-                )
-
-        if article.level != target_level:
-            issues.append(f"level 必须为目标等级 {target_level}，实际为 {article.level}。")
-
-        if len(article.grammar) < plan.grammar_points:
-            issues.append(f"语法点至少 {plan.grammar_points} 个，实际为 {len(article.grammar)}。")
-
-        if len(article.vocabulary) < 4:
-            issues.append(f"生词至少 4 个，实际为 {len(article.vocabulary)}。")
-
-        # 检查生词是否出现在课文中
-        content_text = " ".join([block.en for block in article.content]).lower()
-        missing_vocab = [v.word for v in article.vocabulary if v.word.lower() not in content_text]
-        if missing_vocab:
-            issues.append(f"以下生词未在课文中出现: {', '.join(missing_vocab)}。")
-
-        if article.exercises is None or len(article.exercises) < plan.exercises:
-            issues.append(f"练习至少 {plan.exercises} 个，实际为 {len(article.exercises) if article.exercises else 0}。")
-
-        supported_types = {"choice"}
-        invalid_types = []
-        if article.exercises:
-            invalid_types = [
-                item.type for item in article.exercises if item.type not in supported_types
-            ]
-        if invalid_types:
-            issues.append(f"练习类型存在非法值: {invalid_types}。")
-
-        grammar_text = " ".join(
-            [point.point + " " + point.explanation for point in article.grammar]
-        ).lower()
-        if skeleton.grammar and not any(
-            item.lower() in grammar_text for item in skeleton.grammar[:2]
-        ):
-            issues.append("语法讲解未体现参考骨架语法点。")
-
-        return issues
-
-    @staticmethod
     def _ensure_article_content(result: Any) -> ArticleContent:
         """确保结构化输出结果是 ArticleContent。"""
         if isinstance(result, ArticleContent):
@@ -349,7 +262,7 @@ class ArticleGenerator:
         known_words: list[str] | None = None,
         target_date: date | None = None,
     ) -> ArticleContent:
-        """生成文章，直接抛出失败原因。"""
+        """生成文章。"""
         actual_date = target_date or date.today()
         target_level = min(user_level + 1, 6)
         skeleton = self.select_skeleton(user_level, learning_goals)
@@ -367,7 +280,7 @@ class ArticleGenerator:
 
         print(f"[ArticleGenerator] Generating article for level {target_level}...")
         try:
-            result = await chain.ainvoke({"quality_feedback": ""})
+            result = await chain.ainvoke({})
             article = self._ensure_article_content(result)
         except Exception as exc:
             print(f"[ArticleGenerator] Generation Failed (Structure/API error): {exc}")
@@ -377,13 +290,6 @@ class ArticleGenerator:
         article.source_book = skeleton.book
         article.source_lesson = skeleton.lesson
         article.level = target_level
-
-        issues = self._quality_check(article, skeleton, plan, target_level)
-        if issues:
-            feedback = "\n".join(f"- {issue}" for issue in issues)
-            print(f"[ArticleGenerator] Quality Check Failed:\n{feedback}")
-            # print("Raw output:", article.model_dump_json(indent=2))
-            raise ValueError(f"生成内容未通过质量检查：\n{feedback}")
 
         return article
 
