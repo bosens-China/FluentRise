@@ -17,6 +17,8 @@ import {
 import {
   ReadOutlined,
   CalendarOutlined,
+  ReloadOutlined,
+  BellOutlined,
 } from '@ant-design/icons';
 
 import { useCurrentUser } from '@/hooks/useAuth';
@@ -24,10 +26,17 @@ import { isAuthenticated } from '@/utils/request';
 import { AssessmentModal } from '@/components/assessment';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { StudyCalendar } from '@/components/studyLog/StudyCalendar';
+import { ReviewReminderModal } from '@/components/review/ReviewReminderModal';
 import {
   getTodayArticle,
   type Article,
 } from '@/api/article';
+import {
+  getTodayReviewSummary,
+  getTodayReviews,
+  type ReviewItem,
+  type TodayReviewSummary,
+} from '@/api/review';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -68,14 +77,40 @@ function HomePage() {
   const navigate = useNavigate();
   const [showAssessment, setShowAssessment] = useState(false);
   const [todayArticle, setTodayArticle] = useState<Article | null>(null);
+  const [showReviewReminder, setShowReviewReminder] = useState(false);
+  const [reviewSummary, setReviewSummary] = useState<TodayReviewSummary | null>(null);
+  const [todayReviews, setTodayReviews] = useState<ReviewItem[]>([]);
 
   const needsAssessment = !isLoading && user && !user.has_completed_assessment;
+
+  // 获取今日复习摘要
+  const { run: fetchReviewSummary } = useRequest(getTodayReviewSummary, {
+    manual: true,
+    onSuccess: (data) => {
+      setReviewSummary(data);
+      // 如果有复习任务且不是第一次登录，显示提醒
+      if (data.has_reviews) {
+        // 延迟显示弹窗，让用户先看到首页
+        setTimeout(() => {
+          setShowReviewReminder(true);
+        }, 1500);
+      }
+    },
+  });
+
+  // 获取今日复习列表
+  const { run: fetchTodayReviews } = useRequest(getTodayReviews, {
+    manual: true,
+    onSuccess: (data) => {
+      setTodayReviews(data.items);
+    },
+  });
 
   const handleAssessmentComplete = () => {
     setShowAssessment(false);
     refresh();
     message.success('评估完成！已为你定制学习计划');
-    navigate({ to: '/article/$articleId', params: { articleId: 'today' } });
+    navigate({ to: '/article/$articleId', params: { articleId: 'today' }, search: {} });
   };
 
   const { loading: loadingArticle, run: fetchTodayArticle } = useRequest(
@@ -96,8 +131,10 @@ function HomePage() {
   useEffect(() => {
     if (user?.has_completed_assessment) {
       fetchTodayArticle();
+      fetchReviewSummary();
+      fetchTodayReviews();
     }
-  }, [user?.has_completed_assessment, fetchTodayArticle]);
+  }, [user?.has_completed_assessment, fetchTodayArticle, fetchReviewSummary, fetchTodayReviews]);
 
   // 渲染欢迎头部
   const renderWelcome = () => (
@@ -120,6 +157,67 @@ function HomePage() {
       </div>
     </div>
   );
+
+  // 渲染今日复习卡片
+  const renderTodayReview = () => {
+    if (!reviewSummary?.has_reviews) return null;
+
+    return (
+      <Card
+        className="border-0 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xl shadow-orange-200/50 mb-6 rounded-3xl overflow-hidden relative"
+        bodyStyle={{ padding: '24px' }}
+      >
+        <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+        <div className="flex items-center justify-between relative z-10">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+              <BellOutlined className="text-2xl" />
+            </div>
+            <div>
+              <div className="font-bold text-lg mb-1">今日复习任务</div>
+              <div className="text-amber-100 text-sm">
+                {reviewSummary.message}
+              </div>
+            </div>
+          </div>
+          <Button
+            type="primary"
+            className="bg-white text-orange-600 hover:bg-orange-50 border-0 rounded-xl font-bold px-6"
+            icon={<ReloadOutlined />}
+            onClick={() => setShowReviewReminder(true)}
+          >
+            查看详情
+          </Button>
+        </div>
+        
+        {/* 快速预览前3个 */}
+        {todayReviews.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-white/20">
+            <div className="flex flex-wrap gap-2">
+              {todayReviews.slice(0, 3).map((item) => (
+                <Tag
+                  key={item.schedule_id}
+                  className="bg-white/20 text-white border-0 rounded-full cursor-pointer hover:bg-white/30 transition-colors"
+                  onClick={() => navigate({
+                    to: '/article/$articleId',
+                    params: { articleId: String(item.article_id) },
+                    search: { review: item.schedule_id },
+                  })}
+                >
+                  {item.title.length > 8 ? item.title.slice(0, 8) + '...' : item.title}
+                </Tag>
+              ))}
+              {todayReviews.length > 3 && (
+                <Tag className="bg-white/10 text-white/80 border-0 rounded-full">
+                  +{todayReviews.length - 3}
+                </Tag>
+              )}
+            </div>
+          </div>
+        )}
+      </Card>
+    );
+  };
 
   // 渲染今日任务卡片
   const renderTodayTask = () => {
@@ -178,7 +276,7 @@ function HomePage() {
           <div className="flex flex-col gap-8 sm:flex-row sm:items-center">
             <div className="flex-1">
               <Title level={3} className="mb-4! font-black text-gray-800 tracking-tight hover:text-indigo-600 transition-colors cursor-pointer"
-                onClick={() => navigate({ to: '/article/$articleId', params: { articleId: String(todayArticle.id) } })}
+                onClick={() => navigate({ to: '/article/$articleId', params: { articleId: String(todayArticle.id) }, search: {} })}
               >
                 {todayArticle.title}
               </Title>
@@ -206,6 +304,7 @@ function HomePage() {
                   navigate({
                     to: '/article/$articleId',
                     params: { articleId: String(todayArticle.id) },
+                    search: {},
                   })
                 }
               >
@@ -249,7 +348,7 @@ function HomePage() {
               size="large"
               shape="round"
               loading={loadingArticle}
-              onClick={() => navigate({ to: '/article/$articleId', params: { articleId: 'today' } })}
+              onClick={() => navigate({ to: '/article/$articleId', params: { articleId: 'today' }, search: {} })}
               className="h-12 px-8 font-bold shadow-md shadow-indigo-200"
             >
               开始今日学习
@@ -263,6 +362,8 @@ function HomePage() {
   return (
     <DashboardLayout>
       {renderWelcome()}
+
+      {renderTodayReview()}
 
       <Row gutter={[24, 24]}>
         {/* 左侧主栏：今日任务 & 打卡日历 */}
@@ -353,6 +454,11 @@ function HomePage() {
           }
         }}
         onComplete={handleAssessmentComplete}
+      />
+
+      <ReviewReminderModal
+        open={showReviewReminder}
+        onClose={() => setShowReviewReminder(false)}
       />
     </DashboardLayout>
   );

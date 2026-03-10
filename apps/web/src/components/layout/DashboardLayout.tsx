@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Layout,
   Menu,
@@ -7,6 +7,7 @@ import {
   Typography,
   Dropdown,
   message,
+  Badge,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -21,8 +22,10 @@ import {
   HistoryOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from '@tanstack/react-router';
+import { useRequest } from 'ahooks';
 import { useCurrentUser, useLogout } from '@/hooks/useAuth';
 import { AssessmentModal } from '@/components/assessment';
+import { getReviewStats, type ReviewStats } from '@/api/review';
 
 const { Sider, Content } = Layout;
 const { Text } = Typography;
@@ -34,12 +37,28 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [showAssessment, setShowAssessment] = useState(false);
+  const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, refresh } = useCurrentUser();
   const { logout } = useLogout();
 
-  const menuItems = [
+  // 获取复习统计（用于角标）
+  const { run: fetchReviewStats } = useRequest(getReviewStats, {
+    manual: true,
+    onSuccess: (data) => setReviewStats(data),
+  });
+
+  // 定期刷新复习统计
+  useEffect(() => {
+    fetchReviewStats();
+    // 每5分钟刷新一次
+    const interval = setInterval(fetchReviewStats, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchReviewStats]);
+
+  // 菜单项配置
+  const getMenuItems = (): MenuProps['items'] => [
     {
       key: '/',
       icon: <HomeOutlined />,
@@ -47,7 +66,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     },
     {
       key: '/review',
-      icon: <HistoryOutlined />,
+      icon: reviewStats && reviewStats.today_pending > 0 ? (
+        <Badge count={reviewStats.today_pending} size="small" offset={[0, 0]}>
+          <HistoryOutlined />
+        </Badge>
+      ) : (
+        <HistoryOutlined />
+      ),
       label: '复习中心',
     },
     {
@@ -116,13 +141,34 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <Menu
             mode="inline"
             selectedKeys={[location.pathname]}
-            items={menuItems}
+            items={getMenuItems()}
             onClick={({ key }) => {
               navigate({ to: key });
             }}
             className="border-none bg-transparent"
             itemIcon={null}
           />
+          
+          {/* 复习统计卡片 */}
+          {!collapsed && reviewStats && reviewStats.today_pending > 0 && (
+            <div 
+              className="mt-6 mx-2 p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 cursor-pointer hover:shadow-md transition-all"
+              onClick={() => navigate({ to: '/review' })}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg">🔔</span>
+                <span className="font-bold text-amber-800 text-sm">今日复习</span>
+              </div>
+              <div className="text-2xl font-black text-amber-600 mb-1">
+                {reviewStats.today_pending} <span className="text-sm font-medium text-amber-500">个待完成</span>
+              </div>
+              {reviewStats.streak_days > 0 && (
+                <div className="text-xs text-amber-600/70">
+                  🔥 连续复习 {reviewStats.streak_days} 天
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </Sider>
 

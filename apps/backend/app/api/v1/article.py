@@ -392,6 +392,13 @@ async def update_article_progress(
 
             if new_vocab_entries:
                 db.add_all(new_vocab_entries)
+            
+            # 第一次完成时，创建艾宾浩斯复习计划
+            from app.services.review_service import review_service
+            
+            await review_service.create_review_schedule(
+                db, current_user.id, article.id
+            )
 
     article.updated_at = datetime.utcnow()
 

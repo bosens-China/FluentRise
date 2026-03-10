@@ -84,5 +84,10 @@ class User(Base):
         "StudyLog", back_populates="user", cascade="all, delete-orphan"
     )
 
+    # 关联复习计划
+    review_schedules: Mapped[list["ReviewSchedule"]] = relationship(
+        "ReviewSchedule", back_populates="user", cascade="all, delete-orphan"
+    )
+
     def __repr__(self) -> str:
         return f"<User(id={self.id}, phone={self.phone}, nickname={self.nickname})>"

@@ -35,11 +35,23 @@ const { Title, Text, Paragraph } = Typography;
 interface ArticleReaderProps {
   article: Article;
   onProgressUpdate?: (progress: number, completed: boolean) => void;
+  // 复习模式相关
+  isReviewMode?: boolean;
+  defaultShowChinese?: boolean;
+  onExerciseUpdate?: (correct: number, total: number) => void;
+  onComplete?: () => void;
 }
 
-export function ArticleReader({ article, onProgressUpdate }: ArticleReaderProps) {
+export function ArticleReader({ 
+  article, 
+  onProgressUpdate,
+  isReviewMode = false,
+  defaultShowChinese = true,
+  onExerciseUpdate,
+  onComplete,
+}: ArticleReaderProps) {
   const [activeTab, setActiveTab] = useState('vocabulary');
-  const [showChinese, setShowChinese] = useState(true);
+  const [showChinese, setShowChinese] = useState(defaultShowChinese);
   const [exerciseAnswers, setExerciseAnswers] = useState<Record<number, string>>({});
   const [showAnswers, setShowAnswers] = useState<Record<number, boolean>>({});
   const [readProgress, setReadProgress] = useState(article.is_read || 0);
@@ -78,6 +90,23 @@ export function ArticleReader({ article, onProgressUpdate }: ArticleReaderProps)
       }
     }
   };
+
+  // 追踪练习题正确情况，用于复习模式
+  useEffect(() => {
+    if (!isReviewMode || !onExerciseUpdate) return;
+    
+    const answeredCount = Object.keys(showAnswers).length;
+    if (answeredCount === 0) return;
+    
+    let correctCount = 0;
+    article.exercises.forEach((exercise, idx) => {
+      if (showAnswers[idx] && exerciseAnswers[idx] === exercise.answer) {
+        correctCount++;
+      }
+    });
+    
+    onExerciseUpdate(correctCount, article.exercises.length);
+  }, [showAnswers, exerciseAnswers, article.exercises, isReviewMode, onExerciseUpdate]);
 
   // 标记完成
   const handleMarkComplete = () => {
@@ -466,7 +495,19 @@ export function ArticleReader({ article, onProgressUpdate }: ArticleReaderProps)
               format={(p) => <span className="font-bold text-gray-700">{p}%</span>}
             />
           </div>
-          {readProgress < 100 ? (
+          {isReviewMode ? (
+            // 复习模式：显示复习完成按钮
+            <Button
+              type="primary"
+              shape="round"
+              size="large"
+              className="font-bold shadow-md shadow-indigo-200 bg-gradient-to-r from-emerald-500 to-teal-500 border-0"
+              icon={<CheckCircleOutlined />}
+              onClick={() => onComplete?.()}
+            >
+              完成复习
+            </Button>
+          ) : readProgress < 100 ? (
             <Button
               type="primary"
               shape="round"
