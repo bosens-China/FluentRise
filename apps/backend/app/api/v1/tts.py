@@ -36,7 +36,6 @@ async def get_audio(
     word: str = Query(..., min_length=1, max_length=200, description="要合成的文本"),
     voice: str = Query(default="en-US-ChristopherNeural", description="语音类型"),
     speed: float = Query(default=1.0, ge=0.5, le=2.0, description="语速"),
-    current_user: UserInfo = Depends(get_current_user),
 ) -> Any:
     """
     获取单词/句子音频
@@ -86,7 +85,6 @@ async def get_audio(
 async def get_word_audio(
     word: str,
     voice: str = Query(default="en-US-ChristopherNeural"),
-    current_user: UserInfo = Depends(get_current_user),
 ) -> Any:
     """
     简化版：获取单词音频
@@ -97,5 +95,4 @@ async def get_word_audio(
         word=word,
         voice=voice,
         speed=1.0,
-        current_user=current_user,
     )

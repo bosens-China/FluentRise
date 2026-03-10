@@ -319,7 +319,13 @@ async def generate_article_audio(
         from fastapi import Response
 
         audio_bytes = await tts_service.generate_article_audio_bytes(article_content, article_id)
-        return Response(content=audio_bytes, media_type="audio/mpeg")
+        
+        # 返回音频，设置 30 天 HTTP 缓存
+        headers = {
+            "Cache-Control": "public, max-age=2592000, immutable",
+            "Content-Disposition": f'inline; filename="article_{article_id}.mp3"',
+        }
+        return Response(content=audio_bytes, media_type="audio/mpeg", headers=headers)
     except ImportError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

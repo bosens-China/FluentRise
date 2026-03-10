@@ -85,11 +85,11 @@ def build_audio_url(text: str, voice: str = "en-US-ChristopherNeural", speed: fl
     """
     构建音频 URL
     
-    URL 格式: /v1/tts/audio?word={encoded_text}&voice={voice}&speed={speed}
+    URL 格式: /api/v1/tts/audio?word={encoded_text}&voice={voice}&speed={speed}
     """
     # 对文本进行 URL 编码
     encoded_text = quote(text, safe='')
-    return f"/v1/tts/audio?word={encoded_text}&voice={voice}&speed={speed}"
+    return f"/api/v1/tts/audio?word={encoded_text}&voice={voice}&speed={speed}"
 
 
 class QuestionGenerator:

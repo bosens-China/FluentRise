@@ -177,7 +177,8 @@ export function ArticleReader({
       return;
     }
 
-    const url = `/api/v1/system/tts?text=${encodeURIComponent(text)}`;
+    // 统一使用 /api/v1/tts/audio 接口
+    const url = `/api/v1/tts/audio?word=${encodeURIComponent(text)}`;
     const audio = new Audio(url);
     audioCache.current[text] = audio;
     audio.play().catch(e => {

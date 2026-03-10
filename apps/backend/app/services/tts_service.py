@@ -104,16 +104,19 @@ class TTSService:
 
     async def generate_article_audio_bytes(self, article: ArticleContent, article_id: int) -> bytes:
         """
-        生成整篇文章的音频，并使用 Redis 缓存 30 天
+        生成整篇文章的音频，并使用 Redis 缓存 30 天，带分布式锁防止并发生成
         """
         import base64
+        import logging
 
         from app.db.redis import get_redis
 
+        logger = logging.getLogger(__name__)
         redis_client = await get_redis()
         cache_key = f"tts:article:{article_id}"
+        lock_key = f"lock:{cache_key}"
 
-        # 通过 base64 编码绕过 Redis 客户端可能存在的默认 UTF-8 解码问题
+        # 1. 先检查缓存
         cached_b64 = await redis_client.execute_command("GET", cache_key)
         if cached_b64:
             try:
@@ -121,6 +124,43 @@ class TTSService:
             except Exception:
                 pass  # 忽略旧的损坏缓存
 
+        # 2. 获取分布式锁（文章生成较慢，锁超时设为 5 分钟）
+        lock = redis_client.lock(lock_key, timeout=300, blocking_timeout=30)
+        acquired = await lock.acquire(blocking=True)
+
+        if not acquired:
+            logger.warning(f"[TTS Lock] Failed to acquire lock for article: {article_id}")
+            # 锁获取失败，尝试直接生成（不缓存）
+            return await self._generate_article_audio_raw(article)
+
+        try:
+            # 3. 双重检查
+            cached_b64 = await redis_client.execute_command("GET", cache_key)
+            if cached_b64:
+                try:
+                    return base64.b64decode(cached_b64)
+                except Exception:
+                    pass
+
+            logger.info(f"[TTS Lock] Generating audio for article: {article_id}")
+            audio_bytes = await self._generate_article_audio_raw(article)
+
+            # 4. 存入缓存
+            if audio_bytes:
+                b64_data = base64.b64encode(audio_bytes).decode("ascii")
+                await redis_client.execute_command("SETEX", cache_key, 30 * 24 * 3600, b64_data)
+
+            return audio_bytes
+        finally:
+            try:
+                await lock.release()
+            except Exception:
+                pass
+
+    async def _generate_article_audio_raw(self, article: ArticleContent) -> bytes:
+        """
+        原始文章音频生成（无缓存）
+        """
         if edge_tts is None:
             raise ImportError("edge_tts is not installed")
 
@@ -156,13 +196,7 @@ class TTSService:
                 if audio_bytes is not None:
                     audio_data.extend(audio_bytes)
 
-        audio_bytes = bytes(audio_data)
-        if audio_bytes:
-            # 存入前进行 base64 编码，确保写入的是纯文本字符
-            b64_data = base64.b64encode(audio_bytes).decode("ascii")
-            await redis_client.execute_command("SETEX", cache_key, 30 * 24 * 3600, b64_data)
-
-        return audio_bytes
+        return bytes(audio_data)
 
     async def get_audio_bytes_cached(self, text: str, voice: str | None = None) -> bytes:
         """
