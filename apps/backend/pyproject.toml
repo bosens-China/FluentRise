@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "FluentRise 学习平台后端服务"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.115.0",
+    "fastapi[standard]>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "python-multipart>=0.0.17",
     "sqlalchemy[asyncio]>=2.0.36",
@@ -49,7 +49,7 @@ quote-style = "double"
 
 # uv 任务脚本 - 需要安装: uv pip install taskipy
 [tool.taskipy.tasks]
-dev = "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+dev = "fastapi dev"
 start = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
 lint = "ruff check . --fix"
 format = "ruff format ."

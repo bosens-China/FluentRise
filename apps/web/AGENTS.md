@@ -2,6 +2,8 @@
 
 你是 JavaScript、Rsbuild 和 Web 应用开发方面的专家。你编写的代码具有可维护性、高性能和良好的可访问性。
 
+目前需要你构建一个面向C端的英语学习应用，需要适配pc、笔记本和平板，此外还需要考虑dark和light主题。
+
 ## 通用建议
 
 - 导入svg，安装了 `@rsbuild/plugin-svgr`，可以直接 `import Logo from './logo.svg?react';`
