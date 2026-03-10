@@ -7,12 +7,9 @@ TTS 音频 API
 import hashlib
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
-from app.api.deps import get_current_user
-from app.schemas.user import UserInfo
 from app.services.tts_service import tts_service
 
 router = APIRouter(prefix="/tts", tags=["语音合成"])
@@ -77,8 +74,8 @@ async def get_audio(
 
     except ImportError:
         raise HTTPException(status_code=503, detail="TTS 服务未安装")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"音频生成失败: {str(e)}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"音频生成失败: {str(exc)}")
 
 
 @router.get("/word/{word:path}")

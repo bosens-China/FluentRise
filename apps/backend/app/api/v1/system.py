@@ -3,7 +3,6 @@
 """
 
 import random
-from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -201,10 +200,10 @@ ENCOURAGING_QUOTES = [
 ]
 
 @router.get("/quotes", response_model=list[Quote], summary="获取鼓励语录")
-async def get_quotes(count: int = 5) -> list[dict]:
+async def get_quotes(count: int = 5) -> list[Quote]:
     """
     随机获取指定数量的鼓励语录（支持中英文）
     """
     if count > len(ENCOURAGING_QUOTES):
         count = len(ENCOURAGING_QUOTES)
-    return random.sample(ENCOURAGING_QUOTES, count)
+    return [Quote.model_validate(item) for item in random.sample(ENCOURAGING_QUOTES, count)]

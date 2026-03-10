@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { useRequest } from 'ahooks';
 import {
@@ -44,15 +44,8 @@ export const Route = createFileRoute('/')({
   component: HomePage,
   beforeLoad: () => {
     if (!isAuthenticated()) {
-      throw new Error('UNAUTHORIZED');
+      throw redirect({ to: '/login' });
     }
-  },
-  errorComponent: ({ error }) => {
-    if (error.message === 'UNAUTHORIZED') {
-      window.location.href = '/login';
-      return null;
-    }
-    return <div>出错了: {error.message}</div>;
   },
 });
 

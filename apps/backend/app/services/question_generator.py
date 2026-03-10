@@ -180,7 +180,7 @@ class QuestionGenerator:
                 )
             else:
                 #  fallback：使用简单模板
-                sentence_with_blank = f"Please fill in the blank: _____"
+                sentence_with_blank = "Please fill in the blank: _____"
                 sentence_zh = f"请填写单词：{word_data['meaning']}"
             
             # 生成音频 URL

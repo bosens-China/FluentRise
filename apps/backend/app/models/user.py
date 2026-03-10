@@ -14,6 +14,7 @@ from app.db.database import Base
 if TYPE_CHECKING:
     from app.models.article import Article
     from app.models.note import Note
+    from app.models.review_schedule import ReviewSchedule
     from app.models.study_log import StudyLog
 
 

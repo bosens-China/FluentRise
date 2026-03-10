@@ -9,6 +9,8 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 
+import { router } from '@/router';
+
 // 创建 axios 实例
 const request: AxiosInstance = axios.create({
   baseURL: '/api/v1',
@@ -70,6 +72,13 @@ function onTokenRefreshed(newToken: string): void {
 }
 
 /**
+ * 统一跳转到登录页
+ */
+function redirectToLogin(): void {
+  void router.navigate({ to: '/login', replace: true });
+}
+
+/**
  * 执行 Token 刷新
  */
 async function doRefreshToken(refreshTokenValue: string): Promise<void> {
@@ -110,14 +119,14 @@ request.interceptors.response.use(
       // 排除刷新端点，避免循环
       if (originalRequest.url?.includes('/auth/refresh')) {
         clearTokens();
-        window.location.href = '/login';
+        redirectToLogin();
         return Promise.reject(new Error('登录已过期，请重新登录'));
       }
 
       const refreshTokenValue = getRefreshToken();
       if (!refreshTokenValue) {
         clearTokens();
-        window.location.href = '/login';
+        redirectToLogin();
         return Promise.reject(new Error('登录已过期，请重新登录'));
       }
 
@@ -146,7 +155,7 @@ request.interceptors.response.use(
         isRefreshing = false;
         refreshSubscribers = [];
         clearTokens();
-        window.location.href = '/login';
+        redirectToLogin();
         return Promise.reject(new Error('登录已过期，请重新登录'));
       }
     }
@@ -162,13 +171,13 @@ request.interceptors.response.use(
     // 处理用户账号异常 (被删除或禁用)
     if (error.response?.status === 404 && message === '用户不存在') {
       clearTokens();
-      window.location.href = '/login';
+      redirectToLogin();
       return Promise.reject(new Error('用户登录已失效，请重新登录'));
     }
 
     if (error.response?.status === 403 && message === '用户已被禁用') {
       clearTokens();
-      window.location.href = '/login';
+      redirectToLogin();
       return Promise.reject(new Error('当前账号已被禁用，请联系管理员'));
     }
 

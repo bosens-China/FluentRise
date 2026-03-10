@@ -255,8 +255,11 @@ async def get_article_review_status(
     if not schedule:
         return ArticleReviewStatus(
             is_in_review=False,
+            schedule_id=None,
+            current_stage=None,
             completed=False,
             total_stages=7,
+            next_review_date=None,
         )
     
     return ArticleReviewStatus(

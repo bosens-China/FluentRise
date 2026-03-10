@@ -3,15 +3,11 @@
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.review_schedule import ReviewSchedule, get_next_review_date
-
-if TYPE_CHECKING:
-    from app.models.article import Article
 
 
 class ReviewService:

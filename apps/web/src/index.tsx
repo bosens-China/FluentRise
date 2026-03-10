@@ -1,17 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { RouterProvider, createRouter } from '@tanstack/react-router';
+import { RouterProvider } from '@tanstack/react-router';
 import './index.css';
 
-// 导入生成的路由树
-import { routeTree } from './routeTree.gen';
-
-// 创建路由实例
-const router = createRouter({
-  routeTree,
-  defaultPreload: 'intent',
-  defaultStaleTime: 5000,
-});
+import { router } from './router';
 
 // 为 TypeScript 注册路由类型
 declare module '@tanstack/react-router' {

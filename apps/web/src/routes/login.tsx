@@ -1,4 +1,4 @@
-import { createFileRoute, Navigate } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useState } from 'react';
 import { Card, Form, Input, Button, message, Typography, Divider, Row, Col } from 'antd';
 import { MobileOutlined, SafetyCertificateOutlined, RocketOutlined } from '@ant-design/icons';
@@ -19,14 +19,8 @@ export const Route = createFileRoute('/login')({
   beforeLoad: () => {
     // 如果已登录，重定向到首页
     if (isAuthenticated()) {
-      throw new Error('ALREADY_LOGGED_IN');
+      throw redirect({ to: '/' });
     }
-  },
-  errorComponent: ({ error }) => {
-    if (error.message === 'ALREADY_LOGGED_IN') {
-      return <Navigate to="/" />;
-    }
-    return <div>出错了: {error.message}</div>;
   },
 });
 
