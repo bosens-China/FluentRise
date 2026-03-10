@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VocabularyRouteImport } from './routes/vocabulary'
 import { Route as ReviewRouteImport } from './routes/review'
+import { Route as PlaygroundRouteImport } from './routes/playground'
 import { Route as NotesRouteImport } from './routes/notes'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
@@ -24,6 +25,11 @@ const VocabularyRoute = VocabularyRouteImport.update({
 const ReviewRoute = ReviewRouteImport.update({
   id: '/review',
   path: '/review',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlaygroundRoute = PlaygroundRouteImport.update({
+  id: '/playground',
+  path: '/playground',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NotesRoute = NotesRouteImport.update({
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/notes': typeof NotesRoute
+  '/playground': typeof PlaygroundRoute
   '/review': typeof ReviewRoute
   '/vocabulary': typeof VocabularyRoute
   '/article/$articleId': typeof ArticleArticleIdRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/notes': typeof NotesRoute
+  '/playground': typeof PlaygroundRoute
   '/review': typeof ReviewRoute
   '/vocabulary': typeof VocabularyRoute
   '/article/$articleId': typeof ArticleArticleIdRoute
@@ -68,6 +76,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/notes': typeof NotesRoute
+  '/playground': typeof PlaygroundRoute
   '/review': typeof ReviewRoute
   '/vocabulary': typeof VocabularyRoute
   '/article/$articleId': typeof ArticleArticleIdRoute
@@ -78,6 +87,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/notes'
+    | '/playground'
     | '/review'
     | '/vocabulary'
     | '/article/$articleId'
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/notes'
+    | '/playground'
     | '/review'
     | '/vocabulary'
     | '/article/$articleId'
@@ -94,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/notes'
+    | '/playground'
     | '/review'
     | '/vocabulary'
     | '/article/$articleId'
@@ -103,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   NotesRoute: typeof NotesRoute
+  PlaygroundRoute: typeof PlaygroundRoute
   ReviewRoute: typeof ReviewRoute
   VocabularyRoute: typeof VocabularyRoute
   ArticleArticleIdRoute: typeof ArticleArticleIdRoute
@@ -122,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/review'
       fullPath: '/review'
       preLoaderRoute: typeof ReviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/playground': {
+      id: '/playground'
+      path: '/playground'
+      fullPath: '/playground'
+      preLoaderRoute: typeof PlaygroundRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/notes': {
@@ -159,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   NotesRoute: NotesRoute,
+  PlaygroundRoute: PlaygroundRoute,
   ReviewRoute: ReviewRoute,
   VocabularyRoute: VocabularyRoute,
   ArticleArticleIdRoute: ArticleArticleIdRoute,

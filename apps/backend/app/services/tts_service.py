@@ -205,6 +205,106 @@ class TTSService:
 
         return audio_bytes
 
+    async def get_audio_bytes_cached_with_lock(
+        self, 
+        text: str, 
+        voice: str | None = None,
+        speed: float = 1.0,
+    ) -> bytes:
+        """
+        生成单句/单词音频，带分布式锁防止缓存击穿
+        
+        适用于高并发场景，确保同一音频只生成一次
+        """
+        import base64
+        import hashlib
+        import logging
+
+        from app.db.redis import get_redis
+
+        logger = logging.getLogger(__name__)
+
+        if edge_tts is None:
+            raise ImportError("edge_tts is not installed")
+
+        voice = voice or self.default_voice
+        # speed 参数参与 key 计算，不同语速视为不同音频
+        text_hash = hashlib.md5(f"{voice}:{speed}:{text}".encode("utf-8")).hexdigest()
+        cache_key = f"tts:single:{text_hash}"
+        lock_key = f"lock:{cache_key}"
+
+        redis_client = await get_redis()
+
+        # 1. 先检查缓存
+        cached_b64 = await redis_client.execute_command("GET", cache_key)
+        if cached_b64:
+            try:
+                return base64.b64decode(cached_b64)
+            except Exception:
+                pass  # 忽略旧的损坏缓存
+
+        # 2. 获取分布式锁（防止多个请求同时生成同一音频）
+        # 锁超时 2 分钟，足够生成单个单词音频
+        lock = redis_client.lock(lock_key, timeout=120, blocking_timeout=10)
+        acquired = await lock.acquire(blocking=True)
+
+        if not acquired:
+            logger.warning(f"[TTS Lock] Failed to acquire lock for: {text[:50]}...")
+            # 锁获取失败，尝试直接生成（不缓存）
+            return await self._generate_audio_raw(text, voice, speed)
+
+        try:
+            # 3. 双重检查（获取锁后再次检查缓存）
+            cached_b64 = await redis_client.execute_command("GET", cache_key)
+            if cached_b64:
+                try:
+                    return base64.b64decode(cached_b64)
+                except Exception:
+                    pass
+
+            # 4. 生成音频
+            logger.info(f"[TTS Lock] Generating audio for: {text[:50]}...")
+            audio_bytes = await self._generate_audio_raw(text, voice, speed)
+
+            # 5. 存入缓存
+            if audio_bytes:
+                b64_data = base64.b64encode(audio_bytes).decode("ascii")
+                await redis_client.execute_command("SETEX", cache_key, 30 * 24 * 3600, b64_data)
+                logger.info(f"[TTS Lock] Cached audio for: {text[:50]}...")
+
+            return audio_bytes
+
+        finally:
+            # 6. 释放锁
+            try:
+                await lock.release()
+            except Exception:
+                pass
+
+    async def _generate_audio_raw(self, text: str, voice: str, speed: float = 1.0) -> bytes:
+        """
+        原始音频生成（无缓存）
+        """
+        if edge_tts is None:
+            raise ImportError("edge_tts is not installed")
+
+        # 根据语速调整文本（edge-tts 通过 rate 参数控制）
+        # rate: 可以是百分比如 "+50%" 或 "-20%"
+        rate_str = "+0%"
+        if speed > 1.0:
+            rate_str = f"+{int((speed - 1) * 100)}%"
+        elif speed < 1.0:
+            rate_str = f"-{int((1 - speed) * 100)}%"
+
+        communicate = edge_tts.Communicate(text, voice, rate=rate_str)
+        audio_data = bytearray()
+        async for chunk in communicate.stream():
+            audio_bytes = self._extract_audio_data(chunk)
+            if audio_bytes is not None:
+                audio_data.extend(audio_bytes)
+
+        return bytes(audio_data)
+
     async def warmup_article_audio(self, article_id: int, article: "ArticleContent") -> None:
         """
         异步预热文章音频，带分布式锁防止缓存击穿

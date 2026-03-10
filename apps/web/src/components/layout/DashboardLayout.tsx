@@ -20,6 +20,7 @@ import {
   MenuUnfoldOutlined,
   SettingOutlined,
   HistoryOutlined,
+  PlayCircleOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from '@tanstack/react-router';
 import { useRequest } from 'ahooks';
@@ -180,6 +181,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             onClick={() => setCollapsed(!collapsed)}
             className="text-xl text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center w-10 h-10 rounded-xl transition-colors"
           />
+
+          {/* 游乐场入口 */}
+          <Button
+            type="primary"
+            icon={<PlayCircleOutlined />}
+            onClick={() => navigate({ to: '/playground' })}
+            className="hidden md:flex items-center gap-2 rounded-full px-6 h-11 bg-gradient-to-r from-purple-500 to-pink-500 border-0 hover:opacity-90 shadow-lg shadow-purple-200"
+          >
+            <span className="font-bold">游乐场</span>
+          </Button>
 
           <Dropdown menu={userMenu} placement="bottomRight" arrow>
             <div className="flex cursor-pointer items-center gap-3 rounded-full py-1.5 px-3 transition-all hover:bg-indigo-50 border border-transparent hover:border-indigo-100">

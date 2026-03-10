@@ -48,6 +48,7 @@ async def init_db() -> None:
     # 这些导入是为了注册模型到 SQLAlchemy 元数据，确保 create_all 能创建表
     from app.models.article import Article  # noqa: F401 # type: ignore
     from app.models.note import Note  # noqa: F401 # type: ignore
+    from app.models.practice_session import PracticeSession  # noqa: F401 # type: ignore
     from app.models.study_log import StudyLog  # noqa: F401 # type: ignore
     from app.models.user import User  # noqa: F401 # type: ignore
     from app.models.vocabulary import Vocabulary  # noqa: F401 # type: ignore
