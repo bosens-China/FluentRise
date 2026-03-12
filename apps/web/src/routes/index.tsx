@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { useRequest } from 'ahooks';
 import {
@@ -14,8 +14,8 @@ import {
 } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useAuth';
-import { isAuthenticated } from '@/utils/request';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { AuthGuard } from '@/components/providers';
 import { Button, Card, Badge } from '@/components/ui';
 import { StreakIndicator, DailyGoalRing } from '@/components/gamification';
 import { AssessmentModal } from '@/components/assessment';
@@ -29,14 +29,8 @@ import {
   type TodayReviewSummary,
 } from '@/api/review';
 
-
 export const Route = createFileRoute('/')({
   component: HomePage,
-  beforeLoad: () => {
-    if (!isAuthenticated()) {
-      throw redirect({ to: '/login' });
-    }
-  },
 });
 
 // 等级标签颜色
@@ -209,7 +203,7 @@ function HomePage() {
             <div className="absolute -left-20 -bottom-20 w-48 h-48 bg-white rounded-full blur-3xl" />
           </div>
           <div className="relative py-12 px-8 text-center">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-white/20 flex items-center justify-center">
+            <div className="w-20 mx-auto mb-6 rounded-2xl bg-white/20 flex items-center justify-center">
               <Sparkles className="h-10 w-10" />
             </div>
             <h2 className="text-2xl font-black mb-4">
@@ -403,7 +397,7 @@ function HomePage() {
               学习天数
             </span>
             <div className="flex items-center gap-2">
-              <StreakIndicator days={user.study_days || 0} size="sm" />
+              <StreakIndicator days={user.streak_days || 0} size="sm" />
             </div>
           </div>
         </div>
@@ -456,77 +450,79 @@ function HomePage() {
   );
 
   return (
-    <DashboardLayout
-      user={{
-        username: user?.nickname ?? undefined,
-        avatar: user?.avatar ?? undefined,
-        level: user?.level || 1,
-        currentXP: (user?.level || 0) * 100 + (user?.total_xp || 0) % 100,
-        requiredXP: 100,
-        todayXP: user?.today_xp || 0,
-        streakDays: user?.streak_days || 0,
-      }}
-    >
-      {/* 欢迎区域 */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-2xl font-black text-[var(--text-primary)] mb-1">
-              早安，{user?.nickname || '学习者'}!
-            </h1>
-            <p className="text-[var(--text-secondary)]">
-              准备好开始今天的学习了吗？
-            </p>
-          </div>
-          <div className="hidden sm:block text-right px-6 py-3 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border)]">
-            <div className="text-2xl font-black text-[var(--primary)]">
-              {new Date().toLocaleDateString('zh-CN', { weekday: 'long' })}
-            </div>
-            <div className="text-sm text-[var(--text-secondary)]">
-              {new Date().toLocaleDateString('zh-CN', {
-                month: 'long',
-                day: 'numeric',
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 复习提醒 */}
-      {renderReviewReminder()}
-
-      {/* 主内容区域 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 左侧主栏 */}
-        <div className="lg:col-span-2 space-y-6">
-          {renderTodayTask()}
-          <StudyCalendar />
-        </div>
-
-        {/* 右侧边栏 */}
-        <div className="space-y-6">
-          {renderStats()}
-          {renderProfile()}
-          {renderTip()}
-        </div>
-      </div>
-
-      {/* 模态框 */}
-      <AssessmentModal
-        open={showAssessment || !!needsAssessment}
-        onClose={() => {
-          if (user?.has_completed_assessment) {
-            setShowAssessment(false);
-          }
+    <AuthGuard>
+      <DashboardLayout
+        user={{
+          username: user?.nickname ?? undefined,
+          avatar: user?.avatar ?? undefined,
+          level: user?.level || 1,
+          currentXP: (user?.level || 0) * 100 + (user?.total_xp || 0) % 100,
+          requiredXP: 100,
+          todayXP: user?.today_xp || 0,
+          streakDays: user?.streak_days || 0,
         }}
-        onComplete={handleAssessmentComplete}
-      />
+      >
+        {/* 欢迎区域 */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h1 className="text-2xl font-black text-[var(--text-primary)] mb-1">
+                早安，{user?.nickname || '学习者'}!
+              </h1>
+              <p className="text-[var(--text-secondary)]">
+                准备好开始今天的学习了吗？
+              </p>
+            </div>
+            <div className="hidden sm:block text-right px-6 py-3 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border)]">
+              <div className="text-2xl font-black text-[var(--primary)]">
+                {new Date().toLocaleDateString('zh-CN', { weekday: 'long' })}
+              </div>
+              <div className="text-sm text-[var(--text-secondary)]">
+                {new Date().toLocaleDateString('zh-CN', {
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
 
-      <ReviewReminderModal
-        open={showReviewReminder}
-        onClose={() => setShowReviewReminder(false)}
-      />
-    </DashboardLayout>
+        {/* 复习提醒 */}
+        {renderReviewReminder()}
+
+        {/* 主内容区域 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* 左侧主栏 */}
+          <div className="lg:col-span-2 space-y-6">
+            {renderTodayTask()}
+            <StudyCalendar />
+          </div>
+
+          {/* 右侧边栏 */}
+          <div className="space-y-6">
+            {renderStats()}
+            {renderProfile()}
+            {renderTip()}
+          </div>
+        </div>
+
+        {/* 模态框 */}
+        <AssessmentModal
+          open={showAssessment || !!needsAssessment}
+          onClose={() => {
+            if (user?.has_completed_assessment) {
+              setShowAssessment(false);
+            }
+          }}
+          onComplete={handleAssessmentComplete}
+        />
+
+        <ReviewReminderModal
+          open={showReviewReminder}
+          onClose={() => setShowReviewReminder(false)}
+        />
+      </DashboardLayout>
+    </AuthGuard>
   );
 }
 

@@ -1,9 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { NoteList } from '@/components/note/NoteList';
-import { Typography } from 'antd';
-
-const { Title, Text } = Typography;
+import { NoteListNew } from '@/components/note/NoteListNew';
+import { AuthGuard } from '@/components/providers';
 
 export const Route = createFileRoute('/notes')({
   component: NotesPage,
@@ -11,17 +9,21 @@ export const Route = createFileRoute('/notes')({
 
 function NotesPage() {
   return (
-    <DashboardLayout>
-      <div className="mb-8">
-        <Title level={2} className="mb-2! font-black! text-gray-800 tracking-tight">
-          我的笔记
-        </Title>
-        <Text className="text-gray-500 text-base">
-          记录你的学习心得和思考。
-        </Text>
-      </div>
-      
-      <NoteList hideTitle />
-    </DashboardLayout>
+    <AuthGuard>
+      <DashboardLayout>
+        <div className="mb-8">
+          <h1 className="text-2xl font-black text-[var(--text-primary)] mb-2">
+            我的笔记
+          </h1>
+          <p className="text-[var(--text-secondary)]">
+            记录你的学习心得和思考
+          </p>
+        </div>
+
+        <NoteListNew hideTitle />
+      </DashboardLayout>
+    </AuthGuard>
   );
 }
+
+export default NotesPage;

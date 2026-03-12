@@ -4,6 +4,8 @@ import zhCN from 'antd/locale/zh_CN';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 
+import { ErrorBoundary } from '@/components/providers';
+
 // 设置 dayjs 中文 locale
 dayjs.locale('zh-cn');
 
@@ -48,11 +50,13 @@ const customTheme = {
 
 export const Route = createRootRoute({
   component: () => (
-    <ConfigProvider locale={zhCN} theme={customTheme}>
-      <AntdApp>
-        <Outlet />
-      </AntdApp>
-    </ConfigProvider>
+    <ErrorBoundary>
+      <ConfigProvider locale={zhCN} theme={customTheme}>
+        <AntdApp>
+          <Outlet />
+        </AntdApp>
+      </ConfigProvider>
+    </ErrorBoundary>
   ),
   notFoundComponent: () => (
     <div className="flex h-screen items-center justify-center bg-[var(--bg-primary)]">

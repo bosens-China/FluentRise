@@ -7,8 +7,8 @@
 ---
 
 **Project:** FluentRise
-**Generated:** 2026-03-12 16:10:55
-**Category:** Language Learning App
+**Updated:** 2026-03-12
+**Category:** Language Learning App (Duolingo-inspired)
 
 ---
 
@@ -16,188 +16,183 @@
 
 ### Color Palette
 
-| Role | Hex | CSS Variable |
-|------|-----|--------------|
-| Primary | `#4F46E5` | `--color-primary` |
-| Secondary | `#818CF8` | `--color-secondary` |
-| CTA/Accent | `#22C55E` | `--color-cta` |
-| Background | `#EEF2FF` | `--color-background` |
-| Text | `#312E81` | `--color-text` |
-
-**Color Notes:** Learning indigo + progress green
+| Role | Hex | Dark Mode | CSS Variable |
+|------|-----|-----------|--------------|
+| Primary | `#58CC02` | `#6ADB1F` | `--primary` |
+| Primary Hover | `#4CB000` | `#7FE835` | `--primary-hover` |
+| Secondary | `#1CB0F6` | `#4CC4FF` | `--secondary` |
+| Accent | `#FF9600` | `#FFB84D` | `--accent` |
+| Success | `#58CC02` | `#6ADB1F` | `--success` |
+| Warning | `#FFC800` | `#FFD940` | `--warning` |
+| Error | `#FF4B4B` | `#FF6B6B` | `--error` |
+| BG Primary | `#FFFFFF` | `#0F0F0F` | `--bg-primary` |
+| BG Secondary | `#F7F7F7` | `#1A1A1A` | `--bg-secondary` |
+| BG Elevated | `#FFFFFF` | `#2D2D2D` | `--bg-elevated` |
+| Text Primary | `#262626` | `#FFFFFF` | `--text-primary` |
+| Text Secondary | `#6B7280` | `#9CA3AF` | `--text-secondary` |
+| Border | `#E5E7EB` | `#2D2D2D` | `--border` |
 
 ### Typography
 
-- **Heading Font:** Baloo 2
-- **Body Font:** Comic Neue
-- **Mood:** kids, education, playful, friendly, colorful, learning
-- **Google Fonts:** [Baloo 2 + Comic Neue](https://fonts.google.com/share?selection.family=Baloo+2:wght@400;500;600;700|Comic+Neue:wght@300;400;700)
+- **Primary Font:** Plus Jakarta Sans (Google Fonts)
+- **Weights:** 300, 400, 500, 600, 700, 800
+- **Mood:** Modern, friendly, professional, gamified
+- **Import:** `https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap`
 
-**CSS Import:**
-```css
-@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700&family=Comic+Neue:wght@300;400;700&display=swap');
-```
-
-### Spacing Variables
+### Spacing System (8px base)
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| `--space-xs` | `4px` / `0.25rem` | Tight gaps |
-| `--space-sm` | `8px` / `0.5rem` | Icon gaps, inline spacing |
-| `--space-md` | `16px` / `1rem` | Standard padding |
-| `--space-lg` | `24px` / `1.5rem` | Section padding |
-| `--space-xl` | `32px` / `2rem` | Large gaps |
-| `--space-2xl` | `48px` / `3rem` | Section margins |
-| `--space-3xl` | `64px` / `4rem` | Hero padding |
+| `--space-1` | `4px` / `0.25rem` | Tight gaps |
+| `--space-2` | `8px` / `0.5rem` | Icon gaps |
+| `--space-3` | `12px` / `0.75rem` | Small padding |
+| `--space-4` | `16px` / `1rem` | Standard padding |
+| `--space-5` | `20px` / `1.25rem` | Medium gaps |
+| `--space-6` | `24px` / `1.5rem` | Section padding |
+| `--space-8` | `32px` / `2rem` | Large gaps |
+| `--space-10` | `40px` / `2.5rem` | Section margins |
 
-### Shadow Depths
+### Border Radius
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--radius-sm` | `8px` | Small elements |
+| `--radius-md` | `12px` | Buttons, inputs |
+| `--radius-lg` | `16px` | Cards |
+| `--radius-xl` | `20px` | Large cards |
+| `--radius-2xl` | `24px` | Modals |
+| `--radius-full` | `9999px` | Pills, avatars |
+
+### Shadows
 
 | Level | Value | Usage |
 |-------|-------|-------|
-| `--shadow-sm` | `0 1px 2px rgba(0,0,0,0.05)` | Subtle lift |
-| `--shadow-md` | `0 4px 6px rgba(0,0,0,0.1)` | Cards, buttons |
-| `--shadow-lg` | `0 10px 15px rgba(0,0,0,0.1)` | Modals, dropdowns |
-| `--shadow-xl` | `0 20px 25px rgba(0,0,0,0.15)` | Hero images, featured cards |
+| `--shadow-card` | `0 4px 12px rgba(0,0,0,0.08)` | Cards |
+| `--shadow-card-hover` | `0 8px 24px rgba(0,0,0,0.12)` | Cards hover |
+| `--shadow-button` | `0 4px 0 rgba(0,0,0,0.15)` | 3D buttons |
+| `--shadow-button-active` | `0 2px 0 rgba(0,0,0,0.15)` | Active buttons |
 
 ---
 
 ## Component Specs
 
-### Buttons
+### Button (3D Duolingo Style)
 
-```css
-/* Primary Button */
-.btn-primary {
-  background: #22C55E;
-  color: white;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
+```tsx
+// Primary Button
+<Button variant="primary" size="md">
+  点击我
+</Button>
 
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-/* Secondary Button */
-.btn-secondary {
-  background: transparent;
-  color: #4F46E5;
-  border: 2px solid #4F46E5;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
+// CSS Output:
+// background: var(--primary)
+// color: white
+// border-radius: 12px
+// box-shadow: 0 4px 0 rgba(0,0,0,0.15)
+// hover: translateY(1px), shadow reduces
+// active: translateY(2px), shadow reduces more
 ```
 
-### Cards
+**Variants:** `primary` | `secondary` | `accent` | `outline` | `ghost` | `success`
+**Sizes:** `sm` (h-9) | `md` (h-12) | `lg` (h-14)
 
-```css
-.card {
-  background: #EEF2FF;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: var(--shadow-md);
-  transition: all 200ms ease;
-  cursor: pointer;
-}
+### Card
 
-.card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
-}
+```tsx
+<Card variant="default" padding="md">
+  Content
+</Card>
+
+// Variants:
+// default: shadow + border
+// flat: border only
+// elevated: larger shadow
+// interactive: hover lift effect
 ```
 
-### Inputs
+### Progress Ring (Gamification)
 
-```css
-.input {
-  padding: 12px 16px;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  font-size: 16px;
-  transition: border-color 200ms ease;
-}
-
-.input:focus {
-  border-color: #4F46E5;
-  outline: none;
-  box-shadow: 0 0 0 3px #4F46E520;
-}
+```tsx
+<DailyGoalRing
+  current={75}
+  target={100}
+  unit="%"
+  size={160}
+/>
 ```
 
-### Modals
+### Streak Indicator
 
-```css
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-}
-
-.modal {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: var(--shadow-xl);
-  max-width: 500px;
-  width: 90%;
-}
+```tsx
+<StreakIndicator days={7} size="md" />
+// Shows flame icon with day count
+// Frozen state: blue color
 ```
 
 ---
 
-## Style Guidelines
+## Animation
 
-**Style:** Claymorphism
+| Effect | Duration | Easing |
+|--------|----------|--------|
+| Hover transitions | 200ms | ease-out |
+| Button press | 150ms | ease-out |
+| Card lift | 200ms | ease-out |
+| Progress ring | 800ms | ease-out |
+| Page transitions | 300ms | cubic-bezier(0.16, 1, 0.3, 1) |
 
-**Keywords:** Soft 3D, chunky, playful, toy-like, bubbly, thick borders (3-4px), double shadows, rounded (16-24px)
+---
 
-**Best For:** Educational apps, children's apps, SaaS platforms, creative tools, fun-focused, onboarding, casual games
+## Gamification Elements
 
-**Key Effects:** Inner+outer shadows (subtle, no hard lines), soft press (200ms ease-out), fluffy elements, smooth transitions
-
-### Page Pattern
-
-**Pattern Name:** App Store Style Landing
-
-- **Conversion Strategy:** Show real screenshots. Include ratings (4.5+ stars). QR code for mobile. Platform-specific CTAs.
-- **CTA Placement:** Download buttons prominent (App Store + Play Store) throughout
-- **Section Order:** 1. Hero with device mockup, 2. Screenshots carousel, 3. Features with icons, 4. Reviews/ratings, 5. Download CTAs
+| Element | Icon | Color |
+|---------|------|-------|
+| Streak | Flame | Accent (orange) |
+| XP | Zap | Warning (yellow) |
+| Level | Target | Primary (green) |
+| Gems | Circle | Secondary (blue) |
+| Hearts | Heart | Error (red) |
 
 ---
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Boring design
-- ❌ No motivation
-
-### Additional Forbidden Patterns
-
-- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
-- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** — Always use transitions (150-300ms)
-- ❌ **Invisible focus states** — Focus states must be visible for a11y
+- ❌ **Emojis as icons** — Use Lucide React icons
+- ❌ **Any type** — Use strict TypeScript types
+- ❌ **Missing cursor-pointer** — All interactive elements need it
+- ❌ **Instant state changes** — Always use transitions
+- ❌ **Low contrast text** — Maintain 4.5:1 ratio
+- ❌ **Layout-shifting hovers** — Use transform, not margin/padding changes
 
 ---
 
 ## Pre-Delivery Checklist
 
-Before delivering any UI code, verify:
-
-- [ ] No emojis used as icons (use SVG instead)
-- [ ] All icons from consistent icon set (Heroicons/Lucide)
+- [ ] No `any` types used
+- [ ] All components have proper TypeScript interfaces
 - [ ] `cursor-pointer` on all clickable elements
-- [ ] Hover states with smooth transitions (150-300ms)
-- [ ] Light mode: text contrast 4.5:1 minimum
-- [ ] Focus states visible for keyboard navigation
+- [ ] Hover states with transitions (150-300ms)
+- [ ] Light/Dark mode tested
+- [ ] Responsive: 768px, 1024px, 1440px
+- [ ] Keyboard navigation works
 - [ ] `prefers-reduced-motion` respected
-- [ ] Responsive: 375px, 768px, 1024px, 1440px
-- [ ] No content hidden behind fixed navbars
 - [ ] No horizontal scroll on mobile
+
+---
+
+## File Organization
+
+```
+src/
+├── components/
+│   ├── ui/              # Base UI components (Button, Card, etc.)
+│   ├── gamification/    # Game elements (Streak, XP, Level)
+│   ├── layout/          # Layout components (Sidebar, Header)
+│   └── [feature]/       # Feature-specific components
+├── lib/
+│   ├── utils.ts         # cn() and helpers
+│   └── toast.tsx        # Toast notification system
+├── hooks/
+│   └── useAuth.ts       # Authentication hooks
+└── routes/              # TanStack Router pages
+```
