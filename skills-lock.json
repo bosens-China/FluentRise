@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "fba": {
+      "source": "fastapi-practices/skills",
+      "sourceType": "github",
+      "computedHash": "b2bceccc50dd008d4dc85673021f34b71f0706415176e5a4fba041efedccd7c0"
+    },
     "vercel-composition-patterns": {
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",
