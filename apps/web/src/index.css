@@ -1,53 +1,260 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 @import 'tailwindcss';
 @plugin "@tailwindcss/typography";
 
-/* 全局样式 */
+/* ============================================
+   FluentRise 设计系统 - CSS 变量定义
+   ============================================ */
+
+@theme {
+  /* 字体 */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  
+  /* 圆角 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+  
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-button: 0 4px 0 rgba(0, 0, 0, 0.15);
+  --shadow-button-active: 0 2px 0 rgba(0, 0, 0, 0.15);
+  
+  /* 动画 */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+/* 浅色模式 - 默认 */
+:root {
+  /* 品牌色 */
+  --primary: #58CC02;
+  --primary-hover: #4CB000;
+  --primary-light: rgba(88, 204, 2, 0.1);
+  
+  /* 辅助色 */
+  --secondary: #1CB0F6;
+  --secondary-hover: #1899D6;
+  --secondary-light: rgba(28, 176, 246, 0.1);
+  
+  --accent: #FF9600;
+  --accent-hover: #E68600;
+  --accent-light: rgba(255, 150, 0, 0.1);
+  
+  /* 状态色 */
+  --success: #58CC02;
+  --success-light: rgba(88, 204, 2, 0.1);
+  --warning: #FFC800;
+  --warning-light: rgba(255, 200, 0, 0.1);
+  --error: #FF4B4B;
+  --error-light: rgba(255, 75, 75, 0.1);
+  
+  /* 背景色 */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F7F7F7;
+  --bg-tertiary: #F0F0F0;
+  --bg-elevated: #FFFFFF;
+  
+  /* 文字色 */
+  --text-primary: #262626;
+  --text-secondary: #6B7280;
+  --text-tertiary: #9CA3AF;
+  --text-inverse: #FFFFFF;
+  
+  /* 边框 */
+  --border: #E5E7EB;
+  --border-light: #F3F4F6;
+  
+  /* 特殊 */
+  --streak: #FF9600;
+  --xp: #FFC800;
+  --gem: #1CB0F6;
+  --heart: #FF4B4B;
+}
+
+/* 深色模式 */
+.dark {
+  /* 品牌色 */
+  --primary: #6ADB1F;
+  --primary-hover: #7FE835;
+  --primary-light: rgba(106, 219, 31, 0.15);
+  
+  /* 辅助色 */
+  --secondary: #4CC4FF;
+  --secondary-hover: #66CDFF;
+  --secondary-light: rgba(76, 196, 255, 0.15);
+  
+  --accent: #FFB84D;
+  --accent-hover: #FFC666;
+  --accent-light: rgba(255, 184, 77, 0.15);
+  
+  /* 状态色 */
+  --success: #6ADB1F;
+  --success-light: rgba(106, 219, 31, 0.15);
+  --warning: #FFD940;
+  --warning-light: rgba(255, 217, 64, 0.15);
+  --error: #FF6B6B;
+  --error-light: rgba(255, 107, 107, 0.15);
+  
+  /* 背景色 */
+  --bg-primary: #0F0F0F;
+  --bg-secondary: #1A1A1A;
+  --bg-tertiary: #242424;
+  --bg-elevated: #2D2D2D;
+  
+  /* 文字色 */
+  --text-primary: #FFFFFF;
+  --text-secondary: #9CA3AF;
+  --text-tertiary: #6B7280;
+  --text-inverse: #262626;
+  
+  /* 边框 */
+  --border: #2D2D2D;
+  --border-light: #1A1A1A;
+}
+
+/* ============================================
+   全局基础样式
+   ============================================ */
+
+* {
+  border-color: var(--border);
+}
+
 html {
   scroll-behavior: smooth;
 }
 
 body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s var(--ease-out), color 0.3s var(--ease-out);
 }
 
-/* 自定义滚动条 */
+/* 滚动条样式 */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--bg-secondary);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 3px;
+  background: var(--text-tertiary);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--text-secondary);
 }
 
 /* 选中文本样式 */
 ::selection {
-  background: rgba(99, 102, 241, 0.2);
-  color: inherit;
+  background: var(--primary-light);
+  color: var(--text-primary);
 }
 
-@keyframes wave {
-  0% { transform: rotate( 0.0deg) }
-  10% { transform: rotate(14.0deg) }
-  20% { transform: rotate(-8.0deg) }
-  30% { transform: rotate(14.0deg) }
-  40% { transform: rotate(-4.0deg) }
-  50% { transform: rotate(10.0deg) }
-  60% { transform: rotate( 0.0deg) }
-  100% { transform: rotate( 0.0deg) }
+/* 焦点样式 */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
+
+/* ============================================
+   动画关键帧
+   ============================================ */
+
+@keyframes wave {
+  0% { transform: rotate(0.0deg); }
+  10% { transform: rotate(14.0deg); }
+  20% { transform: rotate(-8.0deg); }
+  30% { transform: rotate(14.0deg); }
+  40% { transform: rotate(-4.0deg); }
+  50% { transform: rotate(10.0deg); }
+  60% { transform: rotate(0.0deg); }
+  100% { transform: rotate(0.0deg); }
+}
+
+@keyframes bounce-subtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ============================================
+   工具类
+   ============================================ */
 
 @utility animate-wave {
   animation: wave 2.5s infinite;
   transform-origin: 70% 70%;
+}
+
+@utility animate-bounce-subtle {
+  animation: bounce-subtle 2s ease-in-out infinite;
+}
+
+@utility animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+@utility animate-slide-up {
+  animation: slide-up 0.3s var(--ease-out) forwards;
+}
+
+@utility animate-fade-in {
+  animation: fade-in 0.2s var(--ease-out) forwards;
+}
+
+@utility animate-scale-in {
+  animation: scale-in 0.2s var(--ease-out) forwards;
+}
+
+@utility transition-colors-theme {
+  transition: background-color 0.2s var(--ease-out), 
+              color 0.2s var(--ease-out), 
+              border-color 0.2s var(--ease-out);
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

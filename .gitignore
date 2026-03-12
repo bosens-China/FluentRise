@@ -16,3 +16,4 @@ dist/
 .idea
 
 .agent
+__pycache__

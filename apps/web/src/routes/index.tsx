@@ -2,35 +2,26 @@ import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { useRequest } from 'ahooks';
 import {
-  Button,
-  Card,
-  Typography,
-  message,
-  Space,
-  Progress,
-  Row,
-  Col,
-  Skeleton,
-  Tag,
-  Empty,
-} from 'antd';
-import {
-  ReadOutlined,
-  CalendarOutlined,
-  ReloadOutlined,
-  BellOutlined,
-} from '@ant-design/icons';
+  BookOpen,
+  Calendar,
+  RefreshCw,
+  Bell,
+  Target,
+  TrendingUp,
+  Sparkles,
+  ChevronRight,
+  Clock,
+} from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useAuth';
 import { isAuthenticated } from '@/utils/request';
-import { AssessmentModal } from '@/components/assessment';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { Button, Card, Badge } from '@/components/ui';
+import { StreakIndicator, DailyGoalRing } from '@/components/gamification';
+import { AssessmentModal } from '@/components/assessment';
 import { StudyCalendar } from '@/components/studyLog/StudyCalendar';
 import { ReviewReminderModal } from '@/components/review/ReviewReminderModal';
-import {
-  getTodayArticle,
-  type Article,
-} from '@/api/article';
+import { getTodayArticle, type Article } from '@/api/article';
 import {
   getTodayReviewSummary,
   getTodayReviews,
@@ -38,7 +29,6 @@ import {
   type TodayReviewSummary,
 } from '@/api/review';
 
-const { Title, Text, Paragraph } = Typography;
 
 export const Route = createFileRoute('/')({
   component: HomePage,
@@ -51,11 +41,10 @@ export const Route = createFileRoute('/')({
 
 // 等级标签颜色
 const getLevelColor = (level: number | null) => {
-  if (level === null) return 'default';
-  if (level <= 1) return 'default';
-  if (level <= 3) return 'blue';
-  if (level <= 5) return 'purple';
-  return 'gold';
+  if (level === null || level <= 1) return 'default';
+  if (level <= 3) return 'secondary';
+  if (level <= 5) return 'accent';
+  return 'success';
 };
 
 // 等级名称
@@ -63,6 +52,17 @@ const getLevelLabel = (level: number | null) => {
   if (level === null) return '未评估';
   const labels = ['零基础', '入门', '初级', '初中级', '中级', '中高级', '高级'];
   return labels[level] || '未知';
+};
+
+// 学习目标映射
+const goalLabels: Record<string, string> = {
+  daily: '日常交流',
+  work: '工作提升',
+  study: '出国留学',
+  travel: '旅游出行',
+  exam: '考试准备',
+  hobby: '兴趣爱好',
+  parent: '亲子教育',
 };
 
 function HomePage() {
@@ -81,12 +81,8 @@ function HomePage() {
     manual: true,
     onSuccess: (data) => {
       setReviewSummary(data);
-      // 如果有复习任务且不是第一次登录，显示提醒
       if (data.has_reviews) {
-        // 延迟显示弹窗，让用户先看到首页
-        setTimeout(() => {
-          setShowReviewReminder(true);
-        }, 1500);
+        setTimeout(() => setShowReviewReminder(true), 1500);
       }
     },
   });
@@ -102,8 +98,11 @@ function HomePage() {
   const handleAssessmentComplete = () => {
     setShowAssessment(false);
     refresh();
-    message.success('评估完成！已为你定制学习计划');
-    navigate({ to: '/article/$articleId', params: { articleId: 'today' }, search: {} });
+    navigate({
+      to: '/article/$articleId',
+      params: { articleId: 'today' },
+      search: {},
+    });
   };
 
   const { loading: loadingArticle, run: fetchTodayArticle } = useRequest(
@@ -114,9 +113,6 @@ function HomePage() {
         if (data.has_article && data.article) {
           setTodayArticle(data.article);
         }
-      },
-      onError: (error) => {
-        message.error(error.message || '获取今日任务失败');
       },
     }
   );
@@ -129,316 +125,393 @@ function HomePage() {
     }
   }, [user?.has_completed_assessment, fetchTodayArticle, fetchReviewSummary, fetchTodayReviews]);
 
-  // 渲染欢迎头部
-  const renderWelcome = () => (
-    <div className="mb-10 mt-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <Title level={2} className="mb-2! font-black! text-gray-800 tracking-tight">
-            早安，{user?.nickname || '学习者'} <span className="animate-wave inline-block origin-[70%_70%]">👋</span>
-          </Title>
-          <Text className="text-gray-500 text-lg">准备好开始今天的学习了吗？</Text>
-        </div>
-        <div className="hidden text-right sm:block bg-white px-6 py-3 rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
-          <Text className="block text-2xl font-black text-indigo-600 tracking-tight">
-            {new Date().toLocaleDateString('zh-CN', { weekday: 'long' })}
-          </Text>
-          <Text className="text-gray-400 font-medium">
-            {new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })}
-          </Text>
-        </div>
-      </div>
-    </div>
-  );
-
-  // 渲染今日复习卡片
-  const renderTodayReview = () => {
+  // 渲染今日复习提醒
+  const renderReviewReminder = () => {
     if (!reviewSummary?.has_reviews) return null;
 
     return (
-      <Card
-        className="border-0 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xl shadow-orange-200/50 mb-6 rounded-3xl overflow-hidden relative"
-        bodyStyle={{ padding: '24px' }}
-      >
-        <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-        <div className="flex items-center justify-between relative z-10">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
-              <BellOutlined className="text-2xl" />
-            </div>
-            <div>
-              <div className="font-bold text-lg mb-1">今日复习任务</div>
-              <div className="text-amber-100 text-sm">
-                {reviewSummary.message}
+      <div className="mb-6 relative overflow-hidden rounded-2xl bg-gradient-to-r from-[var(--accent)] to-orange-500 text-white shadow-lg">
+        <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+        <div className="relative p-6">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                <Bell className="h-7 w-7" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg mb-1">今日复习任务</h3>
+                <p className="text-white/90 text-sm">{reviewSummary.message}</p>
               </div>
             </div>
+            <Button
+              variant="outline"
+              onClick={() => setShowReviewReminder(true)}
+              className="bg-white text-[var(--accent)] border-white hover:bg-white/90 shadow-[0_4px_0_rgba(0,0,0,0.1)]"
+            >
+              <RefreshCw className="h-4 w-4" />
+              开始复习
+            </Button>
           </div>
-          <Button
-            type="primary"
-            className="bg-white text-orange-600 hover:bg-orange-50 border-0 rounded-xl font-bold px-6"
-            icon={<ReloadOutlined />}
-            onClick={() => setShowReviewReminder(true)}
-          >
-            查看详情
-          </Button>
-        </div>
-        
-        {/* 快速预览前3个 */}
-        {todayReviews.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-white/20">
-            <div className="flex flex-wrap gap-2">
-              {todayReviews.slice(0, 3).map((item) => (
-                <Tag
-                  key={item.schedule_id}
-                  className="bg-white/20 text-white border-0 rounded-full cursor-pointer hover:bg-white/30 transition-colors"
-                  onClick={() => navigate({
-                    to: '/article/$articleId',
-                    params: { articleId: String(item.article_id) },
-                    search: { review: item.schedule_id },
-                  })}
-                >
-                  {item.title.length > 8 ? item.title.slice(0, 8) + '...' : item.title}
-                </Tag>
-              ))}
-              {todayReviews.length > 3 && (
-                <Tag className="bg-white/10 text-white/80 border-0 rounded-full">
-                  +{todayReviews.length - 3}
-                </Tag>
-              )}
+
+          {/* 快速预览 */}
+          {todayReviews.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-white/20">
+              <div className="flex flex-wrap gap-2">
+                {todayReviews.slice(0, 3).map((item) => (
+                  <button
+                    key={item.schedule_id}
+                    onClick={() =>
+                      navigate({
+                        to: '/article/$articleId',
+                        params: { articleId: String(item.article_id) },
+                        search: { review: item.schedule_id },
+                      })
+                    }
+                    className="px-3 py-1.5 rounded-full bg-white/20 text-white text-sm font-medium hover:bg-white/30 transition-colors"
+                  >
+                    {item.title.length > 8
+                      ? item.title.slice(0, 8) + '...'
+                      : item.title}
+                  </button>
+                ))}
+                {todayReviews.length > 3 && (
+                  <span className="px-3 py-1.5 rounded-full bg-white/10 text-white/80 text-sm">
+                    +{todayReviews.length - 3}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-      </Card>
+          )}
+        </div>
+      </div>
     );
   };
 
-  // 渲染今日任务卡片
+  // 渲染今日任务
   const renderTodayTask = () => {
-    if (isLoading) return <Skeleton active />;
+    if (isLoading) {
+      return (
+        <Card className="h-96 animate-pulse">
+          <div className="h-full bg-[var(--bg-tertiary)] rounded-xl" />
+        </Card>
+      );
+    }
 
+    // 未评估状态
     if (!user?.has_completed_assessment) {
       return (
-        <Card className="border-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 bg-[length:200%_auto] text-white shadow-xl shadow-indigo-200/50 hover:shadow-2xl hover:shadow-indigo-300/50 transition-all duration-500 rounded-3xl overflow-hidden relative group">
-          <div className="absolute inset-0 opacity-10 mix-blend-overlay"></div>
-          <div className="absolute -right-20 -top-20 w-64 h-64 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
-          <div className="flex flex-col items-center py-10 text-center relative z-10">
-            <Title level={3} className="text-white! font-black tracking-wide mb-4">
+        <Card
+          variant="elevated"
+          className="relative overflow-hidden bg-gradient-to-br from-[var(--primary)] to-emerald-600 text-white"
+        >
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute -right-20 -top-20 w-64 h-64 bg-white rounded-full blur-3xl" />
+            <div className="absolute -left-20 -bottom-20 w-48 h-48 bg-white rounded-full blur-3xl" />
+          </div>
+          <div className="relative py-12 px-8 text-center">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-white/20 flex items-center justify-center">
+              <Sparkles className="h-10 w-10" />
+            </div>
+            <h2 className="text-2xl font-black mb-4">
               开启你的英语之旅 🚀
-            </Title>
-            <Paragraph className="mb-8 max-w-md text-indigo-50 text-lg leading-relaxed">
+            </h2>
+            <p className="mb-8 max-w-md mx-auto text-white/90 text-lg leading-relaxed">
               只需几分钟，完成英语水平评估，我们将为你量身定制专属学习计划。
-            </Paragraph>
+            </p>
             <Button
-              size="large"
-              shape="round"
-              className="border-0 bg-white text-indigo-600 hover:bg-indigo-50! hover:scale-105 transition-transform h-14 px-10 text-lg font-bold shadow-lg shadow-indigo-900/20"
+              variant="outline"
+              size="lg"
               onClick={() => setShowAssessment(true)}
+              className="bg-white text-[var(--primary)] border-white hover:bg-white/90 shadow-[0_4px_0_rgba(0,0,0,0.15)]"
             >
               开始评估
+              <ChevronRight className="h-5 w-5" />
             </Button>
           </div>
         </Card>
       );
     }
 
+    // 已有今日文章
     return (
-      <Card
-        title={
-          <Space className="py-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
-              <CalendarOutlined className="text-lg" />
+      <Card className="overflow-hidden">
+        <div className="flex flex-col lg:flex-row gap-8">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 rounded-xl bg-[var(--primary-light)] flex items-center justify-center">
+                <Calendar className="h-5 w-5 text-[var(--primary)]" />
+              </div>
+              <h2 className="text-xl font-bold text-[var(--text-primary)]">
+                今日任务
+              </h2>
+              {todayArticle && (
+                <Badge
+                  variant={todayArticle.is_read >= 100 ? 'success' : 'default'}
+                >
+                  {todayArticle.is_read >= 100 ? '已完成' : '进行中'}
+                </Badge>
+              )}
             </div>
-            <span className="font-bold text-lg text-gray-800">今日任务</span>
-          </Space>
-        }
-        className="overflow-hidden border-0 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 rounded-3xl"
-        headStyle={{ borderBottom: 'none', padding: '24px 32px 0' }}
-        bodyStyle={{ padding: '32px' }}
-        extra={
-          todayArticle && (
-            <Tag 
-              color={todayArticle.is_read >= 100 ? 'success' : 'processing'}
-              className="rounded-full px-4 py-1.5 font-medium border-0 mt-3"
-            >
-              {todayArticle.is_read >= 100 ? '✅ 已完成' : '⏳ 进行中'}
-            </Tag>
-          )
-        }
-      >
-        {todayArticle ? (
-          <div className="flex flex-col gap-8 sm:flex-row sm:items-center">
-            <div className="flex-1">
-              <Title level={3} className="mb-4! font-black text-gray-800 tracking-tight hover:text-indigo-600 transition-colors cursor-pointer"
-                onClick={() => navigate({ to: '/article/$articleId', params: { articleId: String(todayArticle.id) }, search: {} })}
-              >
-                {todayArticle.title}
-              </Title>
-              <Space className="mb-5 flex-wrap">
-                <Tag className="rounded-md border-0 bg-indigo-50 text-indigo-600 font-medium px-3 py-1">
-                  {getLevelLabel(todayArticle.level)}
-                </Tag>
-                <Tag className="rounded-md border-0 bg-amber-50 text-amber-600 font-medium px-3 py-1">
-                  新概念 {todayArticle.source_book}-{todayArticle.source_lesson}
-                </Tag>
-              </Space>
-              <Paragraph
-                className="mb-8! text-gray-500 text-lg leading-relaxed"
-                ellipsis={{ rows: 2 }}
-              >
-                {todayArticle.content[0]?.en}
-              </Paragraph>
-              <Button
-                type="primary"
-                size="large"
-                shape="round"
-                className="h-12 px-8 font-bold shadow-lg shadow-indigo-200 hover:-translate-y-0.5 transition-all"
-                icon={<ReadOutlined />}
-                onClick={() =>
-                  navigate({
-                    to: '/article/$articleId',
-                    params: { articleId: String(todayArticle.id) },
-                    search: {},
-                  })
-                }
-              >
-                {todayArticle.is_read >= 100 ? '复习文章' : '继续学习'}
-              </Button>
-            </div>
-            <div className="flex justify-center sm:px-8">
+
+            {todayArticle ? (
+              <>
+                <h3
+                  className="text-2xl font-black text-[var(--text-primary)] mb-4 hover:text-[var(--primary)] transition-colors cursor-pointer"
+                  onClick={() =>
+                    navigate({
+                      to: '/article/$articleId',
+                      params: { articleId: String(todayArticle.id) },
+                      search: {},
+                    })
+                  }
+                >
+                  {todayArticle.title}
+                </h3>
+
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <Badge variant={getLevelColor(todayArticle.level)}>
+                    {getLevelLabel(todayArticle.level)}
+                  </Badge>
+                  <Badge variant="outline">
+                    新概念 {todayArticle.source_book}-{todayArticle.source_lesson}
+                  </Badge>
+                </div>
+
+                <p className="text-[var(--text-secondary)] mb-6 line-clamp-2">
+                  {todayArticle.content[0]?.en}
+                </p>
+
+                <Button
+                  onClick={() =>
+                    navigate({
+                      to: '/article/$articleId',
+                      params: { articleId: String(todayArticle.id) },
+                      search: {},
+                    })
+                  }
+                >
+                  <BookOpen className="h-5 w-5" />
+                  {todayArticle.is_read >= 100 ? '复习文章' : '继续学习'}
+                </Button>
+              </>
+            ) : (
+              <div className="flex flex-col items-center py-12 text-center">
+                <div className="w-20 h-20 bg-[var(--bg-secondary)] rounded-2xl flex items-center justify-center mb-6">
+                  <BookOpen className="h-10 w-10 text-[var(--text-tertiary)]" />
+                </div>
+                <h4 className="text-lg font-bold text-[var(--text-primary)] mb-2">
+                  还没有今天的学习内容
+                </h4>
+                <p className="text-[var(--text-secondary)] mb-6">
+                  生成一篇适合你的英语短文，开始今天的学习吧！
+                </p>
+                <Button
+                  loading={loadingArticle}
+                  onClick={() =>
+                    navigate({
+                      to: '/article/$articleId',
+                      params: { articleId: 'today' },
+                      search: {},
+                    })
+                  }
+                >
+                  开始今日学习
+                  <ChevronRight className="h-5 w-5" />
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* 进度环 */}
+          {todayArticle && (
+            <div className="flex items-center justify-center lg:pl-8 lg:border-l border-[var(--border)]">
               <div className="relative">
-                <div className="absolute inset-0 bg-indigo-50 rounded-full scale-110 -z-10"></div>
-                <Progress
-                  type="circle"
-                  percent={todayArticle.is_read}
-                  size={140}
-                  strokeWidth={8}
-                  strokeColor={{
-                    '0%': '#6366f1',
-                    '100%': '#a855f7',
-                  }}
-                  trailColor="transparent"
-                  format={(percent) => (
-                    <div className="flex flex-col items-center">
-                      <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">
-                        {percent}%
-                      </span>
-                      <span className="text-sm font-medium text-gray-400 mt-1">进度</span>
-                    </div>
-                  )}
+                <DailyGoalRing
+                  current={todayArticle.is_read}
+                  target={100}
+                  unit="%"
+                  size={160}
+                  variant="primary"
                 />
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <BookOpen className="h-8 w-8 text-[var(--primary)] mb-1" />
+                  <span className="text-xs text-[var(--text-secondary)]">
+                    阅读进度
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center py-12 text-center bg-gray-50/50 rounded-2xl">
-            <div className="w-20 h-20 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-6">
-              <span className="text-4xl">📚</span>
-            </div>
-            <Title level={4} className="mb-2! text-gray-700">还没有今天的学习内容</Title>
-            <Text className="text-gray-400 mb-6 block">生成一篇适合你的英语短文，开始今天的学习吧！</Text>
-            <Button
-              type="primary"
-              size="large"
-              shape="round"
-              loading={loadingArticle}
-              onClick={() => navigate({ to: '/article/$articleId', params: { articleId: 'today' }, search: {} })}
-              className="h-12 px-8 font-bold shadow-md shadow-indigo-200"
-            >
-              开始今日学习
-            </Button>
-          </div>
-        )}
+          )}
+        </div>
       </Card>
     );
   };
 
-  return (
-    <DashboardLayout>
-      {renderWelcome()}
-
-      {renderTodayReview()}
-
-      <Row gutter={[24, 24]}>
-        {/* 左侧主栏：今日任务 & 打卡日历 */}
-        <Col xs={24} lg={16}>
-          <div className="flex flex-col space-y-8">
-            <section>{renderTodayTask()}</section>
-            <section><StudyCalendar /></section>
+  // 渲染学习档案
+  const renderProfile = () => (
+    <Card>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-[var(--secondary-light)] flex items-center justify-center">
+            <Target className="h-5 w-5 text-[var(--secondary)]" />
           </div>
-        </Col>
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">
+            学习档案
+          </h3>
+        </div>
+        <button
+          onClick={() => setShowAssessment(true)}
+          className="text-sm font-semibold text-[var(--secondary)] hover:underline"
+        >
+          重新评估
+        </button>
+      </div>
 
-        {/* 右侧边栏：概览信息 */}
-        <Col xs={24} xl={8}>
-          <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
-            {/* 学习档案卡片 */}
-            <Card
-              title={<span className="font-bold text-gray-800 text-lg">学习档案</span>}
-              className="border-0 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl"
-              headStyle={{ borderBottom: 'none', paddingTop: '24px', paddingBottom: '12px' }}
-              bodyStyle={{ padding: '24px' }}
-              extra={
-                <Button type="text" className="text-indigo-600 hover:bg-indigo-50 font-medium" shape="round" onClick={() => setShowAssessment(true)}>
-                  重新评估
-                </Button>
-              }
-            >
-              {user?.has_completed_assessment ? (
-                <div className="space-y-6">
-                  <div className="bg-slate-50 p-5 rounded-2xl">
-                    <Text className="mb-2 block text-sm font-medium text-gray-500">
-                      当前水平
-                    </Text>
-                    <div className="flex items-center gap-3">
-                      <Tag color={getLevelColor(user.english_level)} className="text-base px-4 py-1.5 rounded-full border-0 font-bold m-0">
-                        {getLevelLabel(user.english_level)}
-                      </Tag>
-                      <Text className="text-xs text-gray-400">基于评估结果</Text>
-                    </div>
-                  </div>
-                  <div className="bg-slate-50 p-5 rounded-2xl">
-                    <Text className="mb-3 block text-sm font-medium text-gray-500">
-                      学习目标
-                    </Text>
-                    <div className="flex flex-wrap gap-2">
-                      {user.learning_goals?.map((goalId) => (
-                        <Tag key={goalId} className="m-0 px-3 py-1.5 rounded-full border-0 bg-white text-gray-700 shadow-sm font-medium text-xs">
-                          {goalId === 'daily' && '💬 日常交流'}
-                          {goalId === 'work' && '💼 工作提升'}
-                          {goalId === 'study' && '🎓 出国留学'}
-                          {goalId === 'travel' && '✈️ 旅游出行'}
-                          {goalId === 'exam' && '📝 考试准备'}
-                          {goalId === 'hobby' && '🎬 兴趣爱好'}
-                          {goalId === 'parent' && '👶 亲子教育'}
-                        </Tag>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <Empty description="暂无档案" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-              )}
-            </Card>
-
-            {/* 学习贴士 (静态占位，未来可动态化) */}
-            <div 
-              style={{ marginTop: '24px' }}
-              className="rounded-3xl bg-gradient-to-br from-indigo-50 to-purple-50 p-8 border border-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group"
-            >
-              <div className="absolute -right-4 -top-4 text-6xl opacity-10 group-hover:scale-110 transition-transform duration-500">💡</div>
-              <div className="flex gap-4 relative z-10">
-                <div className="text-3xl mt-1">💡</div>
-                <div>
-                  <Text className="block text-indigo-900 font-bold text-lg mb-3">每日贴士</Text>
-                  <Text className="text-indigo-700 leading-relaxed block text-base">
-                    坚持每天阅读一篇短文，比周末突击学习更有效哦！保持节奏，每天进步一点点。
-                  </Text>
-                </div>
-              </div>
+      {user?.has_completed_assessment ? (
+        <div className="space-y-6">
+          <div className="p-4 rounded-xl bg-[var(--bg-secondary)]">
+            <span className="text-sm text-[var(--text-secondary)] block mb-2">
+              当前水平
+            </span>
+            <div className="flex items-center gap-3">
+              <Badge variant={getLevelColor(user.english_level)} size="lg">
+                {getLevelLabel(user.english_level)}
+              </Badge>
+              <span className="text-xs text-[var(--text-tertiary)]">
+                基于评估结果
+              </span>
             </div>
           </div>
-        </Col>
-      </Row>
 
+          {user.learning_goals && user.learning_goals.length > 0 && (
+            <div className="p-4 rounded-xl bg-[var(--bg-secondary)]">
+              <span className="text-sm text-[var(--text-secondary)] block mb-3">
+                学习目标
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {user.learning_goals.map((goalId) => (
+                  <Badge key={goalId} variant="outline">
+                    {goalLabels[goalId] || goalId}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="p-4 rounded-xl bg-[var(--bg-secondary)]">
+            <span className="text-sm text-[var(--text-secondary)] block mb-2">
+              学习天数
+            </span>
+            <div className="flex items-center gap-2">
+              <StreakIndicator days={user.study_days || 0} size="sm" />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-8">
+          <p className="text-[var(--text-tertiary)] mb-4">暂无档案</p>
+          <Button size="sm" onClick={() => setShowAssessment(true)}>
+            开始评估
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+
+  // 渲染学习统计
+  const renderStats = () => (
+    <div className="grid grid-cols-2 gap-4">
+      <Card className="text-center">
+        <div className="h-12 w-12 mx-auto mb-3 rounded-xl bg-[var(--warning-light)] flex items-center justify-center">
+          <TrendingUp className="h-6 w-6 text-[var(--warning)]" />
+        </div>
+        <div className="text-2xl font-black text-[var(--text-primary)]">
+          {user?.total_xp || 0}
+        </div>
+        <div className="text-sm text-[var(--text-secondary)]">总经验值</div>
+      </Card>
+      <Card className="text-center">
+        <div className="h-12 w-12 mx-auto mb-3 rounded-xl bg-[var(--primary-light)] flex items-center justify-center">
+          <Clock className="h-6 w-6 text-[var(--primary)]" />
+        </div>
+        <div className="text-2xl font-black text-[var(--text-primary)]">
+          {user?.study_minutes || 0}
+        </div>
+        <div className="text-sm text-[var(--text-secondary)]">学习分钟</div>
+      </Card>
+    </div>
+  );
+
+  // 渲染每日贴士
+  const renderTip = () => (
+    <div className="rounded-2xl bg-gradient-to-br from-[var(--primary-light)] to-[var(--secondary-light)] p-6 border border-[var(--border)] relative overflow-hidden">
+      <div className="absolute -right-4 -top-4 text-6xl opacity-20">💡</div>
+      <div className="relative">
+        <h4 className="font-bold text-[var(--text-primary)] mb-2">每日贴士</h4>
+        <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
+          坚持每天阅读一篇短文，比周末突击学习更有效哦！保持节奏，每天进步一点点。
+        </p>
+      </div>
+    </div>
+  );
+
+  return (
+    <DashboardLayout
+      user={{
+        username: user?.nickname ?? undefined,
+        avatar: user?.avatar ?? undefined,
+        level: user?.level || 1,
+        currentXP: (user?.level || 0) * 100 + (user?.total_xp || 0) % 100,
+        requiredXP: 100,
+        todayXP: user?.today_xp || 0,
+        streakDays: user?.streak_days || 0,
+      }}
+    >
+      {/* 欢迎区域 */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-2xl font-black text-[var(--text-primary)] mb-1">
+              早安，{user?.nickname || '学习者'}!
+            </h1>
+            <p className="text-[var(--text-secondary)]">
+              准备好开始今天的学习了吗？
+            </p>
+          </div>
+          <div className="hidden sm:block text-right px-6 py-3 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border)]">
+            <div className="text-2xl font-black text-[var(--primary)]">
+              {new Date().toLocaleDateString('zh-CN', { weekday: 'long' })}
+            </div>
+            <div className="text-sm text-[var(--text-secondary)]">
+              {new Date().toLocaleDateString('zh-CN', {
+                month: 'long',
+                day: 'numeric',
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 复习提醒 */}
+      {renderReviewReminder()}
+
+      {/* 主内容区域 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* 左侧主栏 */}
+        <div className="lg:col-span-2 space-y-6">
+          {renderTodayTask()}
+          <StudyCalendar />
+        </div>
+
+        {/* 右侧边栏 */}
+        <div className="space-y-6">
+          {renderStats()}
+          {renderProfile()}
+          {renderTip()}
+        </div>
+      </div>
+
+      {/* 模态框 */}
       <AssessmentModal
         open={showAssessment || !!needsAssessment}
         onClose={() => {
@@ -456,3 +529,5 @@ function HomePage() {
     </DashboardLayout>
   );
 }
+
+export default HomePage;

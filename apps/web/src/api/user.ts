@@ -54,6 +54,13 @@ export interface UserInfo {
   learning_goals: string[] | null;
   custom_goal: string | null;
   has_completed_assessment: boolean;
+  // 游戏化字段
+  level?: number;
+  total_xp?: number;
+  today_xp?: number;
+  streak_days?: number;
+  study_days?: number;
+  study_minutes?: number;
 }
 
 export interface UserProfileResponse {

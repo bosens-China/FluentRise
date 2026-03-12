@@ -13,6 +13,7 @@
 
 - 请修改代码前先阅读相关涉及的skills，然后符合其要求，然后再来修改代码
 - 涉及到界面设计相关的，请使用 ui-ux-pro-max
+- 默认的设计规范位置 ./design-system/fluentrise/MASTER.md
 
 ## 后端要求
 

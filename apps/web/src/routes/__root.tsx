@@ -7,36 +7,37 @@ import 'dayjs/locale/zh-cn';
 // 设置 dayjs 中文 locale
 dayjs.locale('zh-cn');
 
-// 自定义主题配置
+// Ant Design 主题配置 - 与新设计系统保持一致
 const customTheme = {
   token: {
-    colorPrimary: '#4f46e5',
-    colorInfo: '#4f46e5',
-    colorSuccess: '#10b981',
-    colorWarning: '#f59e0b',
-    colorError: '#ef4444',
+    colorPrimary: '#58CC02',
+    colorInfo: '#1CB0F6',
+    colorSuccess: '#58CC02',
+    colorWarning: '#FFC800',
+    colorError: '#FF4B4B',
     borderRadius: 12,
     borderRadiusLG: 16,
     borderRadiusSM: 8,
     fontSize: 14,
-    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-    boxShadowSecondary: '0 8px 40px rgba(0, 0, 0, 0.12)',
+    fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif",
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+    boxShadowSecondary: '0 8px 24px rgba(0, 0, 0, 0.12)',
   },
   components: {
     Button: {
-      borderRadius: 10,
-      controlHeight: 44,
-      controlHeightLG: 52,
+      borderRadius: 12,
+      controlHeight: 48,
+      controlHeightLG: 56,
       paddingInline: 24,
     },
     Input: {
-      borderRadius: 10,
+      borderRadius: 12,
       controlHeight: 48,
       paddingInline: 16,
     },
     Card: {
-      borderRadius: 20,
-      paddingLG: 32,
+      borderRadius: 16,
+      paddingLG: 24,
     },
     Form: {
       verticalLabelPadding: '0 0 8px',
@@ -54,14 +55,18 @@ export const Route = createRootRoute({
     </ConfigProvider>
   ),
   notFoundComponent: () => (
-    <div className="flex h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-50">
+    <div className="flex h-screen items-center justify-center bg-[var(--bg-primary)]">
       <div className="text-center">
-        <div className="mb-6 text-8xl font-bold text-indigo-600">404</div>
-        <h1 className="mb-4 text-2xl font-semibold text-gray-800">页面未找到</h1>
-        <p className="mb-8 text-gray-500">抱歉，您访问的页面不存在或已被移除</p>
+        <div className="mb-6 text-8xl font-black text-[var(--primary)]">404</div>
+        <h1 className="mb-4 text-2xl font-bold text-[var(--text-primary)]">
+          页面未找到
+        </h1>
+        <p className="mb-8 text-[var(--text-secondary)]">
+          抱歉，您访问的页面不存在或已被移除
+        </p>
         <a
           href="/"
-          className="inline-flex items-center rounded-xl bg-indigo-600 px-8 py-3 font-medium text-white shadow-lg shadow-indigo-200 transition-all hover:-translate-y-0.5 hover:bg-indigo-700 hover:shadow-xl hover:shadow-indigo-300"
+          className="inline-flex items-center rounded-xl bg-[var(--primary)] px-8 py-3 font-bold text-white shadow-[0_4px_0_rgb(76,176,2)] hover:translate-y-[1px] hover:shadow-[0_3px_0_rgb(76,176,2)] active:translate-y-[2px] active:shadow-[0_2px_0_rgb(76,176,2)] transition-all"
         >
           返回首页
         </a>

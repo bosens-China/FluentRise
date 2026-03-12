@@ -3,7 +3,7 @@
  */
 import { useNavigate } from '@tanstack/react-router';
 import { useRequest, useSetState } from 'ahooks';
-import { message } from 'antd';
+import { message } from '@/lib/toast';
 import { useEffect, useCallback } from 'react';
 
 import {
