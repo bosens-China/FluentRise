@@ -2,6 +2,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { MobileNav } from '@/components/ui/MobileNav';
 
 /**
  * DashboardLayout - 仪表盘布局
@@ -54,12 +55,12 @@ const DashboardLayout = React.forwardRef<HTMLDivElement, DashboardLayoutProps>(
     return (
       <div
         ref={ref}
-        className={cn('flex h-screen bg-[var(--bg-primary)]', className)}
+        className={cn('flex h-screen bg-[var(--bg-primary)] overflow-hidden', className)}
         {...props}
       >
         {/* 侧边栏 - 平板以上显示 */}
         {!hideSidebar && (
-          <div className="hidden lg:block">
+          <div className="hidden lg:block flex-shrink-0">
             <Sidebar streakDays={streakDays} onLogout={onLogout} />
           </div>
         )}
@@ -78,35 +79,21 @@ const DashboardLayout = React.forwardRef<HTMLDivElement, DashboardLayoutProps>(
             />
           )}
 
-          {/* 页面内容 */}
-          <main className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-6xl mx-auto">
+          {/* 页面内容 - 移动端添加底部导航空间 */}
+          <main className="flex-1 overflow-y-auto scrollbar-thin">
+            <div className="max-w-6xl mx-auto p-4 md:p-6 lg:p-8 pb-24 lg:pb-8">
               {children}
             </div>
           </main>
         </div>
 
         {/* 移动端底部导航 */}
-        {!hideSidebar && (
-          <MobileNav />
-        )}
+        {!hideSidebar && <MobileNav />}
       </div>
     );
   }
 );
 
 DashboardLayout.displayName = 'DashboardLayout';
-
-/**
- * MobileNav - 移动端底部导航
- */
-function MobileNav() {
-  // 简化版，实际项目中可以扩展
-  return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-[var(--bg-secondary)] border-t border-[var(--border)] flex items-center justify-around px-4 z-50">
-      {/* 移动端导航项 */}
-    </nav>
-  );
-}
 
 export { DashboardLayout };
