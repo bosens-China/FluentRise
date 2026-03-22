@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # 安全
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7天
-    REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30  # 30天
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 15  # 15天内免登录
 
     # 数据库
     DATABASE_URL: str = (

@@ -1,11 +1,8 @@
 /**
- * 艾宾浩斯复习系统 API
+ * 复习模块 API
  */
 import request from '@/utils/request';
 
-/**
- * 复习项目
- */
 export interface ReviewItem {
   schedule_id: number;
   article_id: number;
@@ -20,26 +17,17 @@ export interface ReviewItem {
   last_reviewed_at: string | null;
 }
 
-/**
- * 复习列表响应
- */
 export interface ReviewListResponse {
   items: ReviewItem[];
   total: number;
 }
 
-/**
- * 今日复习摘要
- */
 export interface TodayReviewSummary {
   has_reviews: boolean;
   count: number;
   message: string;
 }
 
-/**
- * 复习统计
- */
 export interface ReviewStats {
   total_schedules: number;
   completed_schedules: number;
@@ -49,9 +37,6 @@ export interface ReviewStats {
   weekly_total: number;
 }
 
-/**
- * 文章复习状态
- */
 export interface ArticleReviewStatus {
   is_in_review: boolean;
   schedule_id: number | null;
@@ -61,9 +46,6 @@ export interface ArticleReviewStatus {
   completed: boolean;
 }
 
-/**
- * 复习日志项
- */
 export interface ReviewLogItem {
   id: number;
   stage: number;
@@ -75,17 +57,11 @@ export interface ReviewLogItem {
   reviewed_at: string;
 }
 
-/**
- * 复习日志列表响应
- */
 export interface ReviewLogListResponse {
   logs: ReviewLogItem[];
   total: number;
 }
 
-/**
- * 提交复习请求
- */
 export interface SubmitReviewRequest {
   quality_assessment: 'mastered' | 'fuzzy' | 'forgot';
   is_quick_mode?: boolean;
@@ -95,9 +71,6 @@ export interface SubmitReviewRequest {
   preview_assessment?: 'clear' | 'fuzzy' | 'forgot';
 }
 
-/**
- * 提交复习响应
- */
 export interface SubmitReviewResponse {
   success: boolean;
   completed: boolean;
@@ -106,48 +79,26 @@ export interface SubmitReviewResponse {
   message: string;
 }
 
-/**
- * 获取今日复习摘要
- */
 export async function getTodayReviewSummary(): Promise<TodayReviewSummary> {
   return request.get('/reviews/today/summary');
 }
 
-/**
- * 获取今日复习列表
- */
 export async function getTodayReviews(): Promise<ReviewListResponse> {
   return request.get('/reviews/today/list');
 }
 
-/**
- * 获取复习统计
- */
 export async function getReviewStats(): Promise<ReviewStats> {
   return request.get('/reviews/stats');
 }
 
-/**
- * 获取文章复习状态
- */
-export async function getArticleReviewStatus(
-  articleId: number,
-): Promise<ArticleReviewStatus> {
+export async function getArticleReviewStatus(articleId: number): Promise<ArticleReviewStatus> {
   return request.get(`/reviews/article/${articleId}/status`);
 }
 
-/**
- * 获取复习日志
- */
-export async function getReviewLogs(
-  scheduleId: number,
-): Promise<ReviewLogListResponse> {
+export async function getReviewLogs(scheduleId: number): Promise<ReviewLogListResponse> {
   return request.get(`/reviews/${scheduleId}/logs`);
 }
 
-/**
- * 提交复习完成
- */
 export async function submitReview(
   scheduleId: number,
   data: SubmitReviewRequest,
@@ -155,27 +106,23 @@ export async function submitReview(
   return request.post(`/reviews/${scheduleId}/submit`, data);
 }
 
-/**
- * 获取复习阶段标签
- */
 export function getStageLabel(stage: number): string {
   if (stage >= 8) return '已完成';
   return `第 ${stage}/7 轮`;
 }
 
-/**
- * 获取复习间隔描述
- */
 export function getStageInterval(stage: number): string {
-  const intervals = [1, 2, 3, 5, 7, 15, 30];
+  const intervals = [1, 2, 3, 6, 7, 15, 30];
   if (stage < 1 || stage > 7) return '';
-  const days = intervals[stage - 1];
-  return `${days}天后`;
+  return `${intervals[stage - 1]}天后`;
 }
 
-/**
- * 计算复习进度百分比
- */
+export function formatReviewDueText(daysUntilNext: number): string {
+  if (daysUntilNext < 0) return `已逾期 ${Math.abs(daysUntilNext)} 天`;
+  if (daysUntilNext === 0) return '今天复习';
+  return `${daysUntilNext}天后`;
+}
+
 export function getReviewProgress(currentStage: number | null): number {
   if (!currentStage || currentStage < 1) return 0;
   if (currentStage >= 8) return 100;

@@ -1,144 +1,123 @@
 """
-用户相关的 Pydantic 模型
+用户相关 Pydantic 模型
 """
+
+from __future__ import annotations
 
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# ============== 英语水平评估 ==============
-
 ENGLISH_LEVELS = {
     0: {
         "label": "完全零基础",
-        "cefr": "-",
+        "cefr": "Starter",
         "vocabulary": 0,
-        "description": "不认识英文字母或只会几个单词",
+        "description": "还不能稳定认读英语，先从最短句和最基础词开始。",
     },
     1: {
-        "label": "入门",
+        "label": "启蒙",
         "cefr": "Pre-A1",
-        "vocabulary": 300,
-        "description": "认识字母和少量基础单词",
+        "vocabulary": 120,
+        "description": "能认出常见字母和少量高频词，适合超短对话。",
     },
-    2: {"label": "初级", "cefr": "A1", "vocabulary": 500, "description": "能理解简单的日常用语"},
-    3: {"label": "初中级", "cefr": "A2", "vocabulary": 1000, "description": "能进行简单的对话交流"},
-    4: {"label": "中级", "cefr": "B1", "vocabulary": 2000, "description": "能应对工作、旅游等场景"},
+    2: {
+        "label": "入门",
+        "cefr": "Pre-A1+",
+        "vocabulary": 280,
+        "description": "能理解简单打招呼、自我介绍和常见生活表达。",
+    },
+    3: {
+        "label": "初级",
+        "cefr": "A1",
+        "vocabulary": 550,
+        "description": "能看懂短句和非常简单的生活场景交流。",
+    },
+    4: {
+        "label": "进阶",
+        "cefr": "A2",
+        "vocabulary": 1000,
+        "description": "能处理旅行、购物、校园或家庭等常见场景。",
+    },
     5: {
-        "label": "中高级",
-        "cefr": "B2",
-        "vocabulary": 3500,
-        "description": "能流利交流，理解复杂文本",
+        "label": "实用",
+        "cefr": "B1",
+        "vocabulary": 1800,
+        "description": "能读懂实用短文，并进行比较完整的表达。",
     },
     6: {
-        "label": "高级",
-        "cefr": "C1",
-        "vocabulary": 5000,
-        "description": "能专业/学术场合自如运用",
+        "label": "自主表达",
+        "cefr": "B2",
+        "vocabulary": 3200,
+        "description": "能较自然地讨论熟悉话题，也能处理更复杂的文本。",
     },
 }
 
 LEARNING_GOALS = [
-    {"id": "daily", "label": "日常交流", "icon": "💬", "description": "出国旅游、日常生活对话"},
-    {"id": "work", "label": "工作提升", "icon": "💼", "description": "商务邮件、会议、职场沟通"},
-    {
-        "id": "study",
-        "label": "出国留学",
-        "icon": "🎓",
-        "description": "雅思托福、学术交流、论文写作",
-    },
-    {
-        "id": "travel",
-        "label": "旅游出行",
-        "icon": "✈️",
-        "description": "签证面试、酒店预订、景点游览",
-    },
-    {"id": "exam", "label": "考试准备", "icon": "📝", "description": "四六级、考研英语、职称英语"},
-    {"id": "hobby", "label": "兴趣爱好", "icon": "🎬", "description": "看美剧、听歌、阅读英文原著"},
-    {"id": "parent", "label": "亲子教育", "icon": "👶", "description": "辅导孩子学习、英文启蒙"},
+    {"id": "daily", "label": "日常交流", "icon": "💬", "description": "朋友聊天、家庭生活、基础社交"},
+    {"id": "travel", "label": "旅游出行", "icon": "✈️", "description": "机场、酒店、问路、点餐"},
+    {"id": "work", "label": "办公需求", "icon": "💼", "description": "邮件、会议、职业沟通"},
+    {"id": "study", "label": "学习提升", "icon": "📚", "description": "课堂、留学、阅读训练"},
+    {"id": "exam", "label": "考试准备", "icon": "📝", "description": "学校考试、语言考试、阶段复习"},
+    {"id": "parent", "label": "亲子陪伴", "icon": "👨‍👩‍👧", "description": "辅导孩子、家庭英语启蒙"},
+    {"id": "hobby", "label": "兴趣拓展", "icon": "🎧", "description": "歌曲、影视、兴趣内容"},
 ]
 
 
 class EnglishLevelInfo(BaseModel):
-    """英语水平信息"""
-
-    level: int = Field(..., ge=0, le=6, description="等级 0-6")
+    level: int = Field(..., ge=0, le=6, description="等级")
     label: str = Field(..., description="等级名称")
-    cefr: str = Field(..., description="CEFR标准")
-    vocabulary: int = Field(..., description="词汇量")
-    description: str = Field(..., description="等级描述")
+    cefr: str = Field(..., description="CEFR 对应")
+    vocabulary: int = Field(..., description="参考词汇量")
+    description: str = Field(..., description="等级说明")
 
 
 class LearningGoal(BaseModel):
-    """学习目标选项"""
-
-    id: str = Field(..., description="目标ID")
+    id: str = Field(..., description="目标 ID")
     label: str = Field(..., description="目标名称")
     icon: str = Field(..., description="图标")
-    description: str = Field(..., description="目标描述")
+    description: str = Field(..., description="目标说明")
 
 
 class AssessmentQuestion(BaseModel):
-    """评估测试句子"""
-
-    id: int = Field(..., description="句子ID 1-10")
-    sentence: str = Field(..., description="英文句子")
-    translation: str = Field(..., description="中文翻译")
+    id: int = Field(..., description="题目 ID")
+    sentence: str = Field(..., description="英文片段")
+    translation: str = Field(..., description="中文释义")
     level: int = Field(..., description="对应等级")
 
 
-# ============== 请求模型 ==============
-
-
 class PhoneLoginRequest(BaseModel):
-    """手机号登录请求"""
-
     phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
     code: str = Field(..., min_length=6, max_length=6, description="验证码")
 
 
 class SendSmsCodeRequest(BaseModel):
-    """发送验证码请求"""
-
     phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
 
 
 class RefreshTokenRequest(BaseModel):
-    """刷新令牌请求"""
-
     refresh_token: str = Field(..., description="刷新令牌")
 
 
 class UpdateProfileRequest(BaseModel):
-    """更新用户资料请求"""
-
     nickname: str | None = Field(None, max_length=50, description="昵称")
-    avatar: str | None = Field(None, max_length=500, description="头像URL")
+    avatar: str | None = Field(None, max_length=500, description="头像 URL")
 
 
 class UpdateAssessmentRequest(BaseModel):
-    """更新英语水平评估请求"""
-
-    english_level: int = Field(..., ge=0, le=6, description="英语水平 0-6")
-    learning_goals: list[str] = Field(..., description="学习目标ID列表")
-    custom_goal: str | None = Field(None, max_length=200, description="自定义学习目标")
-
-
-# ============== 响应模型 ==============
+    english_level: int = Field(..., ge=0, le=6, description="英语等级")
+    learning_goals: list[str] = Field(..., description="学习目标")
+    custom_goal: str | None = Field(None, max_length=200, description="自定义目标")
 
 
 class TokenResponse(BaseModel):
-    """令牌响应"""
-
     access_token: str = Field(..., description="访问令牌")
     refresh_token: str = Field(..., description="刷新令牌")
     token_type: str = Field(default="bearer", description="令牌类型")
-    expires_in: int = Field(..., description="访问令牌过期时间（秒）")
+    expires_in: int = Field(..., description="过期秒数")
 
 
 class UserInfo(BaseModel):
-    """用户信息"""
-
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -148,8 +127,6 @@ class UserInfo(BaseModel):
     email: str | None = None
     is_active: bool = True
     created_at: datetime
-
-    # 学习档案
     english_level: int | None = None
     learning_goals: list[str] | None = None
     custom_goal: str | None = None
@@ -157,46 +134,31 @@ class UserInfo(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    """登录响应"""
-
     user: UserInfo
     tokens: TokenResponse
 
 
 class SmsCodeResponse(BaseModel):
-    """验证码响应"""
-
     message: str
     expire_seconds: int = 300
 
 
 class AssessmentDataResponse(BaseModel):
-    """评估数据响应"""
-
-    levels: list[EnglishLevelInfo] = Field(..., description="所有等级信息")
-    goals: list[LearningGoal] = Field(..., description="所有学习目标选项")
-    questions: list[AssessmentQuestion] = Field(..., description="测试句子列表")
+    levels: list[EnglishLevelInfo] = Field(..., description="等级信息")
+    goals: list[LearningGoal] = Field(..., description="学习目标")
+    questions: list[AssessmentQuestion] = Field(..., description="评测片段")
 
 
 class UserProfileResponse(BaseModel):
-    """用户完整资料响应"""
-
     user: UserInfo
     level_info: EnglishLevelInfo | None = None
     goal_details: list[LearningGoal] = Field(default_factory=list)
 
 
-# ============== 通用响应 ==============
-
-
 class MessageResponse(BaseModel):
-    """通用消息响应"""
-
     message: str
 
 
 class NeedAssessmentResponse(BaseModel):
-    """需要完成评估的响应"""
-
     need_assessment: bool = True
-    message: str = "请完成英语水平评估"
+    message: str = "请先完成英语水平评测"

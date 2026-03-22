@@ -42,6 +42,24 @@ export interface UpdateProfileRequest {
   avatar?: string;
 }
 
+export interface MembershipStatus {
+  status: string;
+  plan_name: string;
+  days_left: number;
+  expires_at: string;
+  payment_ready: boolean;
+  multimodal_ready: boolean;
+}
+
+export interface DashboardOverview {
+  streak_days: number;
+  today_checked_in: boolean;
+  completed_lessons: number;
+  vocabulary_total: number;
+  review_pending_total: number;
+  mistake_pending_total: number;
+}
+
 export interface UserInfo {
   id: number;
   phone: string;
@@ -69,63 +87,46 @@ export interface UserProfileResponse {
   goal_details: LearningGoal[];
 }
 
-/**
- * 获取评估数据
- */
 export async function getAssessmentData(): Promise<AssessmentDataResponse> {
   return get<AssessmentDataResponse>('/user/assessment/data');
 }
 
-/**
- * 提交英语水平评估
- */
-export async function submitAssessment(
-  data: UpdateAssessmentRequest
-): Promise<UserInfo> {
+export async function submitAssessment(data: UpdateAssessmentRequest): Promise<UserInfo> {
   return post<UserInfo>('/user/assessment', data);
 }
 
-/**
- * 获取当前用户信息
- */
 export async function getCurrentUser(): Promise<UserInfo> {
   return get<UserInfo>('/user/me');
 }
 
-/**
- * 获取用户完整资料
- */
 export async function getUserProfile(): Promise<UserProfileResponse> {
   return get<UserProfileResponse>('/user/profile');
 }
 
-/**
- * 更新用户资料
- */
-export async function updateProfile(
-  data: UpdateProfileRequest
-): Promise<UserInfo> {
+export async function getMembershipStatus(): Promise<MembershipStatus> {
+  return get<MembershipStatus>('/user/membership');
+}
+
+export async function getDashboardOverview(): Promise<DashboardOverview> {
+  return get<DashboardOverview>('/user/dashboard-overview');
+}
+
+export async function updateProfile(data: UpdateProfileRequest): Promise<UserInfo> {
   return put<UserInfo>('/user/profile', data);
 }
 
-/**
- * 从 localStorage 获取缓存的用户信息
- */
 export function getCachedUserInfo(): UserInfo | null {
   const userInfo = localStorage.getItem('user_info');
-  if (userInfo) {
-    try {
-      return JSON.parse(userInfo) as UserInfo;
-    } catch {
-      return null;
-    }
+  if (!userInfo) {
+    return null;
   }
-  return null;
+  try {
+    return JSON.parse(userInfo) as UserInfo;
+  } catch {
+    return null;
+  }
 }
 
-/**
- * 检查是否需要完成评估
- */
 export function needsAssessment(): boolean {
   const user = getCachedUserInfo();
   return user ? !user.has_completed_assessment : true;

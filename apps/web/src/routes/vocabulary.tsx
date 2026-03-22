@@ -84,9 +84,14 @@ function VocabularyPage() {
                       <div className="text-[var(--text-secondary)] font-medium leading-relaxed">
                         {word.meaning}
                       </div>
-                    </Card>
-                  ))}
-                </div>
+                      {word.article_title ? (
+                        <div className="mt-4 text-sm text-gray-500">
+                          来源课文：{word.article_title}
+                        </div>
+                      ) : null}
+                    </div>
+                  </Card>
+                ))}
               </div>
             ))}
           </div>

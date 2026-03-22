@@ -18,7 +18,7 @@ import { useQuery } from '@/hooks/useData';
 import {
   getTodayReviews,
   getReviewStats,
-  getStageInterval,
+  formatReviewDueText,
   getReviewProgress,
   type ReviewItem,
 } from '@/api/review';
@@ -132,12 +132,30 @@ function ReviewPage() {
           const stageColor = stageColors[item.stage] || stageColors[1];
           const progress = getReviewProgress(item.stage);
 
-          return (
-            <Card
-              key={item.schedule_id}
-              variant="interactive"
-              className="p-5"
-              onClick={() => startReview(item)}
+            {/* 标题 */}
+            <h3 className="font-bold text-lg text-gray-800 mb-3 group-hover:text-indigo-600 transition-colors line-clamp-2">
+              {item.title}
+            </h3>
+
+            {/* 信息 */}
+            <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
+              <CalendarOutlined />
+              <span>复习状态：{formatReviewDueText(item.days_until_next)}</span>
+              {item.last_reviewed_at && (
+                <>
+                  <span className="mx-1">·</span>
+                  <span>已复习 {item.stage - 1} 次</span>
+                </>
+              )}
+            </div>
+
+            {/* 按钮 */}
+            <Button
+              type="primary"
+              block
+              size="large"
+              className="rounded-xl font-bold"
+              icon={<ReadOutlined />}
             >
               {/* 顶部：阶段和进度 */}
               <div className="flex items-center justify-between mb-4">

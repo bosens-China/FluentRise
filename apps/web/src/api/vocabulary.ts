@@ -7,6 +7,7 @@ export interface VocabularyWord {
   us_phonetic: string | null;
   meaning: string;
   article_id: number | null;
+  article_title: string | null;
   created_at: string;
 }
 

@@ -2,7 +2,7 @@
  * 复习前模糊预览弹窗
  * 让用户选择自己对文章内容的记忆程度
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Button, Typography, Space, message } from 'antd';
 import {
   EyeOutlined,
@@ -29,6 +29,12 @@ export function ReviewPreviewModal({
   onCancel,
 }: ReviewPreviewModalProps) {
   const [selected, setSelected] = useState<PreviewAssessment | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setSelected(null);
+    }
+  }, [open]);
 
   const handleConfirm = () => {
     if (!selected) {

@@ -14,6 +14,7 @@ from app.core.security import (
 from app.db.redis import delete_sms_code, get_sms_code, is_code_sent_recently, set_sms_code
 from app.models.user import User
 from app.schemas.user import LoginResponse, TokenResponse, UserInfo
+from app.services.membership_service import membership_service
 
 
 class AuthService:
@@ -91,6 +92,7 @@ class AuthService:
             await db.commit()
             await db.refresh(user)
 
+        await membership_service.ensure_membership(db, user.id)
         return user
 
     @staticmethod

@@ -9,14 +9,21 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AiChatRouteImport } from './routes/ai-chat'
 import { Route as VocabularyRouteImport } from './routes/vocabulary'
 import { Route as ReviewRouteImport } from './routes/review'
 import { Route as PlaygroundRouteImport } from './routes/playground'
 import { Route as NotesRouteImport } from './routes/notes'
+import { Route as MistakesRouteImport } from './routes/mistakes'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ArticleArticleIdRouteImport } from './routes/article.$articleId'
 
+const AiChatRoute = AiChatRouteImport.update({
+  id: '/ai-chat',
+  path: '/ai-chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VocabularyRoute = VocabularyRouteImport.update({
   id: '/vocabulary',
   path: '/vocabulary',
@@ -37,6 +44,11 @@ const NotesRoute = NotesRouteImport.update({
   path: '/notes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MistakesRoute = MistakesRouteImport.update({
+  id: '/mistakes',
+  path: '/mistakes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -55,7 +67,9 @@ const ArticleArticleIdRoute = ArticleArticleIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/ai-chat': typeof AiChatRoute
   '/login': typeof LoginRoute
+  '/mistakes': typeof MistakesRoute
   '/notes': typeof NotesRoute
   '/playground': typeof PlaygroundRoute
   '/review': typeof ReviewRoute
@@ -64,7 +78,9 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/ai-chat': typeof AiChatRoute
   '/login': typeof LoginRoute
+  '/mistakes': typeof MistakesRoute
   '/notes': typeof NotesRoute
   '/playground': typeof PlaygroundRoute
   '/review': typeof ReviewRoute
@@ -74,7 +90,9 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/ai-chat': typeof AiChatRoute
   '/login': typeof LoginRoute
+  '/mistakes': typeof MistakesRoute
   '/notes': typeof NotesRoute
   '/playground': typeof PlaygroundRoute
   '/review': typeof ReviewRoute
@@ -85,7 +103,9 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/ai-chat'
     | '/login'
+    | '/mistakes'
     | '/notes'
     | '/playground'
     | '/review'
@@ -94,7 +114,9 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/ai-chat'
     | '/login'
+    | '/mistakes'
     | '/notes'
     | '/playground'
     | '/review'
@@ -103,7 +125,9 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/ai-chat'
     | '/login'
+    | '/mistakes'
     | '/notes'
     | '/playground'
     | '/review'
@@ -113,7 +137,9 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AiChatRoute: typeof AiChatRoute
   LoginRoute: typeof LoginRoute
+  MistakesRoute: typeof MistakesRoute
   NotesRoute: typeof NotesRoute
   PlaygroundRoute: typeof PlaygroundRoute
   ReviewRoute: typeof ReviewRoute
@@ -128,6 +154,13 @@ declare module '@tanstack/react-router' {
       path: '/vocabulary'
       fullPath: '/vocabulary'
       preLoaderRoute: typeof VocabularyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mistakes': {
+      id: '/mistakes'
+      path: '/mistakes'
+      fullPath: '/mistakes'
+      preLoaderRoute: typeof MistakesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/review': {
@@ -149,6 +182,13 @@ declare module '@tanstack/react-router' {
       path: '/notes'
       fullPath: '/notes'
       preLoaderRoute: typeof NotesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ai-chat': {
+      id: '/ai-chat'
+      path: '/ai-chat'
+      fullPath: '/ai-chat'
+      preLoaderRoute: typeof AiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -177,7 +217,9 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AiChatRoute: AiChatRoute,
   LoginRoute: LoginRoute,
+  MistakesRoute: MistakesRoute,
   NotesRoute: NotesRoute,
   PlaygroundRoute: PlaygroundRoute,
   ReviewRoute: ReviewRoute,

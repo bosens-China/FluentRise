@@ -110,74 +110,7 @@ export function AssessmentModal({
     </div>
   );
 
-  // 第二步：句子测试
-  const renderTest = () => {
-    if (!assessmentData) return null;
-
-    return (
-      <div className="flex flex-col h-full animate-fade-in">
-        <div className="text-center mb-8">
-          <Title level={3} className="!mb-2 font-black text-gray-800">
-            你能轻松理解以下哪句话？
-          </Title>
-          <Text className="text-gray-500 text-base">
-            请选择你能完全看懂的<span className="font-bold text-indigo-600">最长/最难</span>的句子
-          </Text>
-        </div>
-
-        <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar pb-4 max-h-[400px]">
-          {assessmentData.questions.map((q) => {
-            const isSelected = selectedLevel === q.level;
-            return (
-              <div
-                key={q.id}
-                onClick={() => setSelectedLevel(q.level)}
-                className={`group relative cursor-pointer rounded-2xl border-2 p-5 transition-all duration-300 ${
-                  isSelected
-                    ? 'border-indigo-500 bg-indigo-50/50 shadow-md'
-                    : 'border-transparent bg-gray-50 hover:border-indigo-200 hover:bg-white hover:shadow-sm'
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                    isSelected ? 'border-indigo-500 bg-indigo-500 text-white' : 'border-gray-300 bg-white group-hover:border-indigo-300'
-                  }`}>
-                    {isSelected && <div className="h-2 w-2 rounded-full bg-white" />}
-                  </div>
-                  <div>
-                    <Text className={`block text-lg font-medium transition-colors ${isSelected ? 'text-indigo-900' : 'text-gray-700'}`}>
-                      {q.sentence}
-                    </Text>
-                    <Text className="block text-sm text-gray-400 mt-1">
-                      {q.translation}
-                    </Text>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
-          <Button type="text" onClick={() => setCurrentStep(0)} icon={<ArrowLeftOutlined />} className="text-gray-500 font-medium">
-            返回
-          </Button>
-          <Button
-            type="primary"
-            size="large"
-            shape="round"
-            className="px-8 font-bold shadow-md shadow-indigo-200"
-            disabled={selectedLevel === null}
-            onClick={() => setCurrentStep(2)}
-          >
-            下一步
-          </Button>
-        </div>
-      </div>
-    );
-  };
-
-  // 第三步：学习目标
+  // 第二步：学习目标
   const renderGoals = () => {
     if (!assessmentData) return null;
 
@@ -242,6 +175,73 @@ export function AssessmentModal({
         </div>
 
         <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
+          <Button type="text" onClick={() => setCurrentStep(0)} icon={<ArrowLeftOutlined />} className="text-gray-500 font-medium">
+            返回
+          </Button>
+          <Button
+            type="primary"
+            size="large"
+            shape="round"
+            className="px-8 font-bold shadow-md shadow-indigo-200"
+            disabled={selectedGoals.length === 0 && customGoal.trim().length === 0}
+            onClick={() => setCurrentStep(2)}
+          >
+            下一步
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  // 第三步：句子测试
+  const renderTest = () => {
+    if (!assessmentData) return null;
+
+    return (
+      <div className="flex flex-col h-full animate-fade-in">
+        <div className="text-center mb-8">
+          <Title level={3} className="!mb-2 font-black text-gray-800">
+            你能轻松理解以下哪句话？
+          </Title>
+          <Text className="text-gray-500 text-base">
+            请选择你能完全看懂的<span className="font-bold text-indigo-600">最长/最难</span>的句子
+          </Text>
+        </div>
+
+        <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar pb-4 max-h-[400px]">
+          {assessmentData.questions.map((q) => {
+            const isSelected = selectedLevel === q.level;
+            return (
+              <div
+                key={q.id}
+                onClick={() => setSelectedLevel(q.level)}
+                className={`group relative cursor-pointer rounded-2xl border-2 p-5 transition-all duration-300 ${
+                  isSelected
+                    ? 'border-indigo-500 bg-indigo-50/50 shadow-md'
+                    : 'border-transparent bg-gray-50 hover:border-indigo-200 hover:bg-white hover:shadow-sm'
+                }`}
+              >
+                <div className="flex items-start gap-4">
+                  <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                    isSelected ? 'border-indigo-500 bg-indigo-500 text-white' : 'border-gray-300 bg-white group-hover:border-indigo-300'
+                  }`}>
+                    {isSelected && <div className="h-2 w-2 rounded-full bg-white" />}
+                  </div>
+                  <div>
+                    <Text className={`block text-lg font-medium transition-colors ${isSelected ? 'text-indigo-900' : 'text-gray-700'}`}>
+                      {q.sentence}
+                    </Text>
+                    <Text className="block text-sm text-gray-400 mt-1">
+                      {q.translation}
+                    </Text>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
           <Button type="text" onClick={() => setCurrentStep(1)} icon={<ArrowLeftOutlined />} className="text-gray-500 font-medium">
             返回
           </Button>
@@ -250,7 +250,7 @@ export function AssessmentModal({
             size="large"
             shape="round"
             className="px-8 font-bold shadow-md shadow-indigo-200"
-            disabled={(selectedGoals.length === 0 && customGoal.trim().length === 0) || submitting}
+            disabled={selectedLevel === null || submitting}
             loading={submitting}
             onClick={() => {
               submit({
@@ -345,8 +345,8 @@ export function AssessmentModal({
         {/* 内容区 */}
         <div className="flex-1 p-8 sm:p-12 overflow-hidden">
           {currentStep === 0 && renderWelcome()}
-          {currentStep === 1 && renderTest()}
-          {currentStep === 2 && renderGoals()}
+          {currentStep === 1 && renderGoals()}
+          {currentStep === 2 && renderTest()}
           {currentStep === 3 && renderComplete()}
         </div>
       </div>

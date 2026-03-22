@@ -1,14 +1,12 @@
 """
-AI 文章生成服务
-基于新概念骨架 + 用户画像，生成可控的现代化学习文章。
+渐进式文章生成服务
 """
 
-import json
+from __future__ import annotations
+
 import random
 from dataclasses import dataclass
 from datetime import date
-from pathlib import Path
-from typing import Any
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
@@ -17,280 +15,363 @@ from pydantic import SecretStr
 from app.core.config import settings
 from app.schemas.article import ArticleContent
 
-NCE_SKELETON_PATH = Path(__file__).parent.parent / "data" / "nce_skeleton.json"
-NCE_SKELETON_META_PATH = Path(__file__).parent.parent / "data" / "nce_skeleton_meta.json"
+LEVEL_VOCAB_TARGETS = {
+    0: 50,
+    1: 160,
+    2: 320,
+    3: 650,
+    4: 1200,
+    5: 2200,
+    6: 3500,
+}
 
-NCE_SKELETON = json.loads(NCE_SKELETON_PATH.read_text(encoding="utf-8"))
-NCE_SKELETON_META = json.loads(NCE_SKELETON_META_PATH.read_text(encoding="utf-8"))
+GOAL_SCENE_HINTS = {
+    "daily": ["邻里交流", "朋友聊天", "日常购物", "家庭生活"],
+    "work": ["办公室沟通", "会议准备", "自我介绍", "邮件场景"],
+    "study": ["校园生活", "老师提问", "课堂讨论", "图书馆"],
+    "travel": ["机场", "酒店", "问路", "点餐"],
+    "exam": ["复习计划", "课堂任务", "答题思路", "学习安排"],
+    "hobby": ["电影", "运动", "音乐", "社交兴趣"],
+    "parent": ["亲子交流", "学校通知", "家庭日常", "陪伴孩子"],
+}
+
+DIFFICULTY_BIAS_HINTS = {
+    "steady": "保持当前等级内的稳定难度。",
+    "ease_down": "同级内轻微降难，优先更短句、更少新词、更强复现。",
+    "ease_up": "同级内轻微升难，但绝对不能跨级。",
+}
 
 
 @dataclass(frozen=True)
-class LessonContext:
-    """骨架课程上下文。"""
+class LessonBudget:
+    """当前课文的生成预算。"""
 
-    book: int
-    lesson: int
-    title: str
-    theme: str
-    grammar: list[str]
-    vocab_focus: list[str]
-    base_level: int
-    level_offset: int
-    goal_tags: set[str]
-
-
-@dataclass(frozen=True)
-class OutputPlan:
-    """输出格式蓝图。"""
-
+    level: int
+    stage_name: str
+    article_form: str
     paragraphs: int
     min_sentences: int
     max_sentences: int
     min_words_per_sentence: int
     max_words_per_sentence: int
+    new_vocab_min: int
+    new_vocab_max: int
     grammar_points: int
     exercises: int
+    default_show_dialogue: bool
+    difficulty_bias: str = "steady"
+
+
+BASE_LEVEL_BUDGETS: dict[int, LessonBudget] = {
+    0: LessonBudget(0, "foundation", "short_dialogue", 4, 1, 1, 2, 6, 2, 3, 1, 3, True),
+    1: LessonBudget(1, "foundation", "short_dialogue", 4, 1, 2, 3, 7, 2, 3, 1, 3, True),
+    2: LessonBudget(2, "foundation", "micro_story", 4, 1, 2, 4, 8, 3, 4, 1, 3, False),
+    3: LessonBudget(3, "foundation", "micro_story", 5, 1, 2, 5, 10, 3, 4, 1, 4, False),
+    4: LessonBudget(4, "foundation", "short_story", 5, 1, 2, 7, 12, 3, 5, 2, 4, False),
+    5: LessonBudget(5, "foundation", "short_story", 6, 1, 2, 8, 14, 4, 5, 2, 4, False),
+    6: LessonBudget(6, "foundation", "short_story", 6, 1, 3, 9, 16, 4, 5, 2, 4, False),
+}
 
 
 class ArticleGenerator:
-    """文章生成器。"""
+    """面向零基础与初中级用户的渐进式文章生成器。"""
 
     def __init__(self) -> None:
         self.llm = ChatOpenAI(
             model=settings.OPENAI_MODEL,
             api_key=SecretStr(settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None,
             base_url=settings.OPENAI_BASE_URL,
-            temperature=0.7,
+            temperature=0.65,
         )
-        # 使用 function_calling 模式以获得更好的兼容性，避免部分 Provider 不支持 json_schema
         self.structured_llm = self.llm.with_structured_output(
-            ArticleContent, method="function_calling"
-        )
-        self.goal_keywords: dict[str, list[str]] = NCE_SKELETON_META.get("goal_keywords", {})
-        self.book_base_level: dict[int, int] = {
-            int(k): int(v) for k, v in NCE_SKELETON_META.get("book_base_level", {}).items()
-        }
-        self.level_output_rules: dict[int, dict[str, int]] = {
-            int(k): v for k, v in NCE_SKELETON_META.get("level_output_rules", {}).items()
-        }
-        self.available_goal_tags = set(NCE_SKELETON_META.get("goal_taxonomy", []))
-        self.lesson_pool = self._build_lesson_pool()
-
-    def _infer_goal_tags(self, theme: str, title: str) -> set[str]:
-        """从标题与主题中推断标准目标标签。"""
-        text = f"{theme} {title}".lower()
-        tags: set[str] = set()
-        for goal, keywords in self.goal_keywords.items():
-            if any(keyword in text for keyword in keywords):
-                tags.add(goal)
-        if not tags:
-            tags.add("daily")
-        return tags
-
-    def _build_lesson_pool(self) -> list[LessonContext]:
-        """加载并增强骨架课程，生成可打分的候选池。"""
-        pool: list[LessonContext] = []
-        for book_data in NCE_SKELETON.get("books", []):
-            book = int(book_data.get("book", 1))
-            lessons = sorted(book_data.get("lessons", []), key=lambda x: int(x.get("lesson", 0)))
-            lesson_count = len(lessons)
-            base_level = self.book_base_level.get(book, min(book + 1, 6))
-
-            for idx, lesson in enumerate(lessons):
-                ratio = idx / (lesson_count - 1) if lesson_count > 1 else 0.5
-                if ratio < 0.33:
-                    level_offset = -1
-                elif ratio < 0.66:
-                    level_offset = 0
-                else:
-                    level_offset = 1
-
-                title = str(lesson.get("title", "Untitled"))
-                theme = str(lesson.get("theme", "General"))
-                grammar = [str(item) for item in lesson.get("grammar", [])]
-                vocab_focus = [str(item) for item in lesson.get("vocab_focus", [])]
-                goal_tags = self._infer_goal_tags(theme, title)
-
-                pool.append(
-                    LessonContext(
-                        book=book,
-                        lesson=int(lesson.get("lesson", 1)),
-                        title=title,
-                        theme=theme,
-                        grammar=grammar,
-                        vocab_focus=vocab_focus,
-                        base_level=base_level,
-                        level_offset=level_offset,
-                        goal_tags=goal_tags,
-                    )
-                )
-        return pool
-
-    def _build_output_plan(self, target_level: int) -> OutputPlan:
-        """根据目标等级构建输出蓝图。"""
-        raw = self.level_output_rules.get(target_level) or self.level_output_rules.get(3, {})
-        return OutputPlan(
-            paragraphs=int(raw.get("paragraphs", 6)),
-            min_sentences=int(raw.get("min_sentences", 1)),
-            max_sentences=int(raw.get("max_sentences", 3)),
-            min_words_per_sentence=int(raw.get("min_words_per_sentence", 10)),
-            max_words_per_sentence=int(raw.get("max_words_per_sentence", 18)),
-            grammar_points=int(raw.get("grammar_points", 2)),
-            exercises=int(raw.get("exercises", 3)),
+            ArticleContent,
+            method="function_calling",
         )
 
-    def select_skeleton(self, user_level: int, learning_goals: list[str]) -> LessonContext:
-        """按等级和学习目标打分选骨架。"""
-        target_level = min(user_level + 1, 6)
-        normalized_goals = {goal for goal in learning_goals if goal in self.available_goal_tags}
-        if not normalized_goals:
-            normalized_goals = {"daily"}
+    def _derive_stage_name(self, completed_lessons: int, vocabulary_count: int, level: int) -> str:
+        """根据学习进度估算同级内阶段。"""
+        vocab_target = LEVEL_VOCAB_TARGETS.get(level, LEVEL_VOCAB_TARGETS[6])
+        if completed_lessons < 4 or vocabulary_count < max(6, vocab_target // 12):
+            return "warmup"
+        if completed_lessons < 14 or vocabulary_count < max(18, vocab_target // 6):
+            return "steady"
+        return "stretch"
 
-        scored: list[tuple[float, LessonContext]] = []
-        for lesson in self.lesson_pool:
-            level_gap = abs(lesson.base_level - target_level)
-            if level_gap > 2:
-                continue
+    def _build_stage_budget(
+        self,
+        *,
+        user_level: int,
+        completed_lessons: int,
+        vocabulary_count: int,
+    ) -> LessonBudget:
+        """先根据阶段生成基础预算。"""
+        base = BASE_LEVEL_BUDGETS.get(user_level, BASE_LEVEL_BUDGETS[0])
+        stage_name = self._derive_stage_name(completed_lessons, vocabulary_count, user_level)
 
-            score = 10.0 - 3.0 * level_gap
-            if lesson.goal_tags & normalized_goals:
-                score += 4.0
-            if lesson.level_offset >= 0:
-                score += 2.0
-            score += random.uniform(0.0, 0.4)
-            scored.append((score, lesson))
+        if stage_name == "warmup":
+            return LessonBudget(
+                level=base.level,
+                stage_name=stage_name,
+                article_form=base.article_form,
+                paragraphs=base.paragraphs,
+                min_sentences=base.min_sentences,
+                max_sentences=base.max_sentences,
+                min_words_per_sentence=base.min_words_per_sentence,
+                max_words_per_sentence=base.max_words_per_sentence,
+                new_vocab_min=base.new_vocab_min,
+                new_vocab_max=base.new_vocab_max,
+                grammar_points=base.grammar_points,
+                exercises=base.exercises,
+                default_show_dialogue=base.default_show_dialogue,
+            )
 
-        if not scored:
-            return random.choice(self.lesson_pool)
+        if stage_name == "steady":
+            return LessonBudget(
+                level=base.level,
+                stage_name=stage_name,
+                article_form=base.article_form,
+                paragraphs=base.paragraphs + (0 if base.article_form == "short_dialogue" else 1),
+                min_sentences=base.min_sentences,
+                max_sentences=base.max_sentences,
+                min_words_per_sentence=base.min_words_per_sentence,
+                max_words_per_sentence=base.max_words_per_sentence + 1,
+                new_vocab_min=base.new_vocab_min,
+                new_vocab_max=min(5, base.new_vocab_max + 1),
+                grammar_points=min(2, base.grammar_points),
+                exercises=base.exercises,
+                default_show_dialogue=base.default_show_dialogue,
+            )
 
-        scored.sort(key=lambda item: item[0], reverse=True)
-        top_candidates = [item[1] for item in scored[:12]]
-        return random.choice(top_candidates)
+        return LessonBudget(
+            level=base.level,
+            stage_name=stage_name,
+            article_form="micro_story" if base.article_form == "short_dialogue" else base.article_form,
+            paragraphs=base.paragraphs + 1,
+            min_sentences=base.min_sentences,
+            max_sentences=min(base.max_sentences + 1, 3),
+            min_words_per_sentence=base.min_words_per_sentence,
+            max_words_per_sentence=base.max_words_per_sentence + 2,
+            new_vocab_min=base.new_vocab_min + 1,
+            new_vocab_max=min(5, base.new_vocab_max + 1),
+            grammar_points=min(2, base.grammar_points + 1),
+            exercises=base.exercises + 1,
+            default_show_dialogue=base.default_show_dialogue,
+        )
+
+    @staticmethod
+    def _apply_difficulty_bias(budget: LessonBudget, difficulty_bias: str) -> LessonBudget:
+        """在同级内做轻量难度保护。"""
+        if difficulty_bias == "ease_down":
+            adjusted_max_words = max(
+                budget.min_words_per_sentence,
+                budget.max_words_per_sentence - 2,
+            )
+            adjusted_new_vocab_max = max(budget.new_vocab_min, budget.new_vocab_max - 1)
+            adjusted_new_vocab_min = min(max(1, budget.new_vocab_min - 1), adjusted_new_vocab_max)
+            return LessonBudget(
+                level=budget.level,
+                stage_name=budget.stage_name,
+                article_form=budget.article_form,
+                paragraphs=max(3, budget.paragraphs - (1 if budget.paragraphs > 4 else 0)),
+                min_sentences=budget.min_sentences,
+                max_sentences=max(budget.min_sentences, budget.max_sentences - 1),
+                min_words_per_sentence=budget.min_words_per_sentence,
+                max_words_per_sentence=adjusted_max_words,
+                new_vocab_min=adjusted_new_vocab_min,
+                new_vocab_max=adjusted_new_vocab_max,
+                grammar_points=max(1, budget.grammar_points),
+                exercises=max(3, budget.exercises - 1),
+                default_show_dialogue=budget.default_show_dialogue,
+                difficulty_bias=difficulty_bias,
+            )
+
+        if difficulty_bias == "ease_up":
+            adjusted_new_vocab_max = min(5, budget.new_vocab_max + 1)
+            adjusted_new_vocab_min = min(budget.new_vocab_min + 1, adjusted_new_vocab_max)
+            return LessonBudget(
+                level=budget.level,
+                stage_name=budget.stage_name,
+                article_form=budget.article_form,
+                paragraphs=budget.paragraphs + (1 if budget.article_form != "short_dialogue" else 0),
+                min_sentences=budget.min_sentences,
+                max_sentences=min(3, budget.max_sentences + 1),
+                min_words_per_sentence=budget.min_words_per_sentence,
+                max_words_per_sentence=budget.max_words_per_sentence + 1,
+                new_vocab_min=adjusted_new_vocab_min,
+                new_vocab_max=adjusted_new_vocab_max,
+                grammar_points=min(2, budget.grammar_points + 1),
+                exercises=budget.exercises + 1,
+                default_show_dialogue=budget.default_show_dialogue,
+                difficulty_bias=difficulty_bias,
+            )
+
+        return LessonBudget(
+            level=budget.level,
+            stage_name=budget.stage_name,
+            article_form=budget.article_form,
+            paragraphs=budget.paragraphs,
+            min_sentences=budget.min_sentences,
+            max_sentences=budget.max_sentences,
+            min_words_per_sentence=budget.min_words_per_sentence,
+            max_words_per_sentence=budget.max_words_per_sentence,
+            new_vocab_min=budget.new_vocab_min,
+            new_vocab_max=budget.new_vocab_max,
+            grammar_points=budget.grammar_points,
+            exercises=budget.exercises,
+            default_show_dialogue=budget.default_show_dialogue,
+            difficulty_bias=difficulty_bias,
+        )
+
+    def build_budget(
+        self,
+        user_level: int,
+        completed_lessons: int,
+        vocabulary_count: int,
+        difficulty_bias: str = "steady",
+    ) -> LessonBudget:
+        """构建本次文章预算。"""
+        base_budget = self._build_stage_budget(
+            user_level=user_level,
+            completed_lessons=completed_lessons,
+            vocabulary_count=vocabulary_count,
+        )
+        return self._apply_difficulty_bias(base_budget, difficulty_bias)
+
+    @staticmethod
+    def _pick_scene(learning_goals: list[str], custom_goal: str | None) -> str:
+        """优先使用自定义目标，否则从学习目标里选场景。"""
+        if custom_goal:
+            return custom_goal
+
+        candidates: list[str] = []
+        for goal in learning_goals:
+            candidates.extend(GOAL_SCENE_HINTS.get(goal, []))
+        if not candidates:
+            candidates = GOAL_SCENE_HINTS["daily"]
+        return random.choice(candidates)
 
     def build_prompt(
         self,
-        skeleton: LessonContext,
-        user_level: int,
+        *,
+        budget: LessonBudget,
         learning_goals: list[str],
         custom_goal: str | None,
         known_words: list[str],
+        recent_titles: list[str],
+        recent_topics: list[str],
         target_date: date,
-        plan: OutputPlan,
+        feedback_reason: str | None,
+        feedback_comment: str | None,
+        difficulty_note: str | None,
     ) -> ChatPromptTemplate:
-        """构建可控生成提示词。"""
-        target_level = min(user_level + 1, 6)
-        goal_str = ", ".join(learning_goals) if learning_goals else "daily"
-        custom_goal_text = custom_goal or "无"
-        known_words_str = ", ".join(known_words) if known_words else "无"
+        """构建文章生成提示词。"""
+        scene_hint = self._pick_scene(learning_goals, custom_goal)
+        known_words_str = ", ".join(known_words[:30]) if known_words else "无"
+        recent_titles_str = " | ".join(recent_titles[:8]) if recent_titles else "无"
+        recent_topics_str = " | ".join(recent_topics[:6]) if recent_topics else "无"
+        learning_goal_text = "、".join(learning_goals) if learning_goals else "daily"
+
+        feedback_text = feedback_reason or "无"
+        if feedback_comment:
+            feedback_text = f"{feedback_text}; 补充：{feedback_comment}"
+
+        difficulty_text = DIFFICULTY_BIAS_HINTS.get(budget.difficulty_bias, DIFFICULTY_BIAS_HINTS["steady"])
+        if difficulty_note:
+            difficulty_text = f"{difficulty_text} 参考依据：{difficulty_note}"
 
         return ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
-                    """你是资深英语教学设计师。
-请严格执行「新瓶装旧酒」策略：保留参考骨架中的核心语法与词汇（旧酒），但完全重写一个符合用户诉求的现代背景故事（新瓶）。
-同时，内容难度需恰好在用户的 i+1 范围内（当前等级到目标等级之间），让用户每次学习都能获得提升。
-你将通过结构化输出返回结果，必须严格遵守字段语义与蓝图约束。""",
+                    "你是一名面向中文用户的英语课程设计师。"
+                    "目标用户是零基础到中级的成年人或青少年。"
+                    "请生成一篇严格控制难度、强调成就感和可理解性的短课文。"
+                    "不要跨级，不要为了有趣而牺牲可读性。"
+                    "优先复现旧词与高频句型，新词数量必须克制。"
+                    "tips 的第一项标题必须是“导读”，内容用中文写成 2 到 3 句。"
+                    "如果为对话，speaker 字段必须填写。"
+                    "source_book 和 source_lesson 都保持 null。"
                 ),
                 (
                     "user",
-                    """请生成今日学习文章：
-
-【用户画像】
-- 当前等级: {user_level}/6
-- 目标等级: {target_level}/6
-- 学习目标标签: {goals}
-- 用户自定义诉求: {custom_goal}
-- 用户已掌握词汇: {known_words} （请在课文中尽量使用这些词作为基础，并自然引入少量高于这些基础的新词）
-
-【参考骨架】
-- 册别: {source_book}
-- 课次: {source_lesson}
-- 原始主题: {theme}
-- 参考语法点: {grammar}
-- 参考词汇: {vocab}
-
-【输出蓝图】
-- 段落数必须: {paragraphs}
-- 每段英文句数: {min_sentences}~{max_sentences}
-- 每句英文词数建议: {min_words_per_sentence}~{max_words_per_sentence}
-- 必须包含生词部分 (vocabulary)，生词数量至少: 4 个，需包含单词、中英音标及释义。
-- 课文部分需要严格包含你所给出的生词，确保生词在课文中被使用。
-- 语法讲解数量至少: {grammar_points}
-- 练习数量至少: {exercises}
-- 练习类型必须全部为阅读理解单选题 (choice)，必须提供4个选项 (options)，并给出准确的参考答案 (answer)。
-- 如果是对话形式，请在 content 中标注 speaker (例如: "Alice", "Bob", "Narrator")
-
-【日期】
-{date}
-""",
+                    "请生成今天的英语课文。\n"
+                    f"- 日期: {target_date.isoformat()}\n"
+                    f"- 当前等级: {budget.level}\n"
+                    f"- 同级阶段: {budget.stage_name}\n"
+                    f"- 学习目标: {learning_goal_text}\n"
+                    f"- 场景方向: {scene_hint}\n"
+                    f"- 文章形式: {budget.article_form}\n"
+                    f"- 段落数: {budget.paragraphs}\n"
+                    f"- 每段句子数: {budget.min_sentences}-{budget.max_sentences}\n"
+                    f"- 每句单词数: {budget.min_words_per_sentence}-{budget.max_words_per_sentence}\n"
+                    f"- 新词数: {budget.new_vocab_min}-{budget.new_vocab_max}\n"
+                    f"- 语法点数量: {budget.grammar_points}\n"
+                    f"- 练习题数量: {budget.exercises}\n"
+                    f"- 已学词汇: {known_words_str}\n"
+                    f"- 最近标题，避免重复: {recent_titles_str}\n"
+                    f"- 最近主题，避免重复: {recent_topics_str}\n"
+                    f"- 用户反馈: {feedback_text}\n"
+                    f"- 难度保护策略: {difficulty_text}\n"
+                    "要求：\n"
+                    "1. level 0-1 优先使用极短句、对话和高频表达。\n"
+                    "2. vocabulary 里的每个单词必须出现在正文里。\n"
+                    "3. grammar 只讲最关键的 1-2 个点，并用中文解释。\n"
+                    "4. exercises 以选择题和填空题为主。\n"
+                    "5. 如果反馈是太难，只能轻微降难；如果太简单，只能轻微升难，不能跨级。\n"
+                    "6. 标题自然现代，避免与最近标题重复。\n"
+                    "7. 不要出现付费、会员、模型、系统设定等内容。"
                 ),
             ]
-        ).partial(
-            user_level=user_level,
-            target_level=target_level,
-            goals=goal_str,
-            custom_goal=custom_goal_text,
-            known_words=known_words_str,
-            source_book=skeleton.book,
-            source_lesson=skeleton.lesson,
-            theme=skeleton.theme,
-            grammar=", ".join(skeleton.grammar),
-            vocab=", ".join(skeleton.vocab_focus[:12]),
-            paragraphs=plan.paragraphs,
-            min_sentences=plan.min_sentences,
-            max_sentences=plan.max_sentences,
-            min_words_per_sentence=plan.min_words_per_sentence,
-            max_words_per_sentence=plan.max_words_per_sentence,
-            grammar_points=plan.grammar_points,
-            exercises=plan.exercises,
-            date=target_date.isoformat(),
         )
-
-    @staticmethod
-    def _ensure_article_content(result: Any) -> ArticleContent:
-        """确保结构化输出结果是 ArticleContent。"""
-        if isinstance(result, ArticleContent):
-            return result
-        return ArticleContent.model_validate(result)
 
     async def generate(
         self,
+        *,
         user_level: int,
         learning_goals: list[str],
         custom_goal: str | None = None,
         known_words: list[str] | None = None,
         target_date: date | None = None,
+        recent_titles: list[str] | None = None,
+        recent_topics: list[str] | None = None,
+        completed_lessons: int = 0,
+        vocabulary_count: int = 0,
+        feedback_reason: str | None = None,
+        feedback_comment: str | None = None,
+        difficulty_bias: str = "steady",
+        difficulty_note: str | None = None,
     ) -> ArticleContent:
         """生成文章。"""
         actual_date = target_date or date.today()
-        target_level = min(user_level + 1, 6)
-        skeleton = self.select_skeleton(user_level, learning_goals)
-        plan = self._build_output_plan(target_level)
-        prompt = self.build_prompt(
-            skeleton=skeleton,
+        budget = self.build_budget(
             user_level=user_level,
+            completed_lessons=completed_lessons,
+            vocabulary_count=vocabulary_count,
+            difficulty_bias=difficulty_bias,
+        )
+        prompt = self.build_prompt(
+            budget=budget,
             learning_goals=learning_goals,
             custom_goal=custom_goal,
             known_words=known_words or [],
+            recent_titles=recent_titles or [],
+            recent_topics=recent_topics or [],
             target_date=actual_date,
-            plan=plan,
+            feedback_reason=feedback_reason,
+            feedback_comment=feedback_comment,
+            difficulty_note=difficulty_note,
         )
         chain = prompt | self.structured_llm
 
-        print(f"[ArticleGenerator] Generating article for level {target_level}...")
         try:
             result = await chain.ainvoke({})
-            article = self._ensure_article_content(result)
+            article = result if isinstance(result, ArticleContent) else ArticleContent.model_validate(result)
         except Exception as exc:
-            print(f"[ArticleGenerator] Generation Failed (Structure/API error): {exc}")
-            raise ValueError(f"结构化输出或 API 调用失败：{exc}") from exc
+            raise ValueError(f"文章生成失败: {exc}") from exc
 
-        # 强制覆盖来源字段，避免模型漂移
-        article.source_book = skeleton.book
-        article.source_lesson = skeleton.lesson
-        article.level = target_level
-
+        article.level = budget.level
+        article.source_book = None
+        article.source_lesson = None
         return article
 
 

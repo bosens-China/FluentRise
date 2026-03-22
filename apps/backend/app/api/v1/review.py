@@ -25,8 +25,26 @@ from app.schemas.review import (
     TodayReviewSummary,
 )
 from app.schemas.user import UserInfo
+from app.services.study_log_service import study_log_service
 
 router = APIRouter(prefix="/reviews", tags=["复习"])
+
+
+def get_due_review_deadlines() -> tuple[date, datetime, datetime]:
+    """返回今日日期以及到期查询使用的时间边界。"""
+    today = date.today()
+    today_start = datetime.combine(today, datetime.min.time())
+    today_end = datetime.combine(today, datetime.max.time())
+    return today, today_start, today_end
+
+
+def build_due_review_filters(user_id: int, today_end: datetime) -> Any:
+    """构建“今天及以前到期”的复习计划筛选条件。"""
+    return and_(
+        ReviewSchedule.user_id == user_id,
+        ReviewSchedule.current_stage < 8,
+        ReviewSchedule.next_review_date <= today_end,
+    )
 
 
 def calculate_streak_days(logs: list[ReviewLog]) -> int:
@@ -65,30 +83,36 @@ async def get_today_review_summary(
     current_user: UserInfo = Depends(get_current_user),
 ) -> Any:
     """获取今日复习任务摘要（用于首页仪表盘弹窗提醒）"""
-    today = date.today()
-    today_start = datetime.combine(today, datetime.min.time())
-    today_end = datetime.combine(today, datetime.max.time())
+    _today, today_start, today_end = get_due_review_deadlines()
     
     count_result = await db.execute(
         select(func.count())
         .select_from(ReviewSchedule)
-        .where(
-            and_(
-                ReviewSchedule.user_id == current_user.id,
-                ReviewSchedule.current_stage < 8,
-                ReviewSchedule.next_review_date >= today_start,
-                ReviewSchedule.next_review_date <= today_end,
-            )
-        )
+        .where(build_due_review_filters(current_user.id, today_end))
     )
     count = count_result.scalar_one()
     
     if count == 0:
         message = "今天没有复习任务，继续学习新内容吧！"
-    elif count == 1:
-        message = "今天有 1 个内容需要复习"
     else:
-        message = f"今天有 {count} 个内容需要复习"
+        overdue_result = await db.execute(
+            select(func.count())
+            .select_from(ReviewSchedule)
+            .where(
+                and_(
+                    build_due_review_filters(current_user.id, today_end),
+                    ReviewSchedule.next_review_date < today_start,
+                )
+            )
+        )
+        overdue_count = overdue_result.scalar_one()
+
+        if overdue_count == 0:
+            message = f"今天有 {count} 个内容需要复习"
+        elif overdue_count == count:
+            message = f"你有 {count} 个逾期复习任务待完成"
+        else:
+            message = f"今天有 {count} 个待复习内容，其中 {overdue_count} 个已逾期"
     
     return TodayReviewSummary(has_reviews=count > 0, count=count, message=message)
 
@@ -99,21 +123,12 @@ async def get_today_reviews(
     current_user: UserInfo = Depends(get_current_user),
 ) -> Any:
     """获取今日详细复习列表"""
-    today = date.today()
-    today_start = datetime.combine(today, datetime.min.time())
-    today_end = datetime.combine(today, datetime.max.time())
+    _today, _today_start, today_end = get_due_review_deadlines()
     
     result = await db.execute(
         select(ReviewSchedule, Article)
         .join(Article, ReviewSchedule.article_id == Article.id)
-        .where(
-            and_(
-                ReviewSchedule.user_id == current_user.id,
-                ReviewSchedule.current_stage < 8,
-                ReviewSchedule.next_review_date >= today_start,
-                ReviewSchedule.next_review_date <= today_end,
-            )
-        )
+        .where(build_due_review_filters(current_user.id, today_end))
         .order_by(ReviewSchedule.next_review_date)
     )
     
@@ -165,22 +180,13 @@ async def get_review_stats(
     )
     completed_schedules = completed_result.scalar_one()
     
-    # 今日待复习数
-    today = date.today()
-    today_start = datetime.combine(today, datetime.min.time())
-    today_end = datetime.combine(today, datetime.max.time())
+    # 今日待复习数（包含逾期未完成的任务）
+    today, _today_start, today_end = get_due_review_deadlines()
     
     pending_result = await db.execute(
         select(func.count())
         .select_from(ReviewSchedule)
-        .where(
-            and_(
-                ReviewSchedule.user_id == current_user.id,
-                ReviewSchedule.current_stage < 8,
-                ReviewSchedule.next_review_date >= today_start,
-                ReviewSchedule.next_review_date <= today_end,
-            )
-        )
+        .where(build_due_review_filters(current_user.id, today_end))
     )
     today_pending = pending_result.scalar_one()
     
@@ -387,6 +393,13 @@ async def submit_review(
         message = f"✅ 第 {current_stage} 轮复习完成！下次复习在 {days} 天后"
     
     await db.commit()
+    article_title_result = await db.execute(select(Article.title).where(Article.id == schedule.article_id))
+    article_title = article_title_result.scalar_one_or_none()
+    await study_log_service.check_in(
+        db,
+        current_user.id,
+        course_title=f"复习：{article_title}" if article_title else "复习",
+    )
     
     return SubmitReviewResponse(
         success=True,

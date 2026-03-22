@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
 from app.db.database import get_db
@@ -25,6 +26,7 @@ class VocabularyResponse(BaseModel):
     us_phonetic: str | None
     meaning: str
     article_id: int | None
+    article_title: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -50,6 +52,7 @@ async def get_vocabulary_timeline(
     """
     result = await db.execute(
         select(Vocabulary)
+        .options(selectinload(Vocabulary.article))
         .where(Vocabulary.user_id == current_user.id)
         .order_by(desc(Vocabulary.created_at), desc(Vocabulary.id))
     )
@@ -61,7 +64,9 @@ async def get_vocabulary_timeline(
         date_str = vocab.created_at.strftime("%Y-%m-%d")
         if date_str not in groups:
             groups[date_str] = []
-        groups[date_str].append(VocabularyResponse.model_validate(vocab))
+        item = VocabularyResponse.model_validate(vocab)
+        item.article_title = vocab.article.title if vocab.article else None
+        groups[date_str].append(item)
 
     timeline = [TimelineGroup(date=date_str, words=words) for date_str, words in groups.items()]
 

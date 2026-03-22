@@ -1,0 +1,195 @@
+import { useMemo, useState } from 'react';
+import { createFileRoute, redirect, useSearch } from '@tanstack/react-router';
+import { useRequest } from 'ahooks';
+import { App, Button, Card, Empty, Input, Segmented, Space, Typography } from 'antd';
+
+import { sendAIChatMessage } from '@/api/aiChat';
+import { getArticleDetail, getTodayArticle } from '@/api/article';
+import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { isAuthenticated } from '@/utils/request';
+
+const { Paragraph, Text, Title } = Typography;
+
+type ChatMode = 'lesson' | 'general';
+
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export const Route = createFileRoute('/ai-chat')({
+  component: AIChatPage,
+  beforeLoad: () => {
+    if (!isAuthenticated()) {
+      throw redirect({ to: '/login' });
+    }
+  },
+});
+
+function AIChatPage() {
+  const search = useSearch({ from: '/ai-chat' }) as { articleId?: number; mode?: ChatMode };
+  const { message } = App.useApp();
+  const [mode, setMode] = useState<ChatMode>(search.mode || 'general');
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 'welcome',
+      role: 'assistant',
+      content: '你可以问我课文里的表达，也可以直接把不会说的中文发给我。',
+    },
+  ]);
+
+  const todayArticleRequest = useRequest(getTodayArticle);
+
+  const lessonArticleId = useMemo(() => {
+    if (typeof search.articleId === 'number') {
+      return search.articleId;
+    }
+    return todayArticleRequest.data?.article?.id;
+  }, [search.articleId, todayArticleRequest.data?.article?.id]);
+
+  const articleDetailRequest = useRequest(
+    async () => {
+      if (!lessonArticleId) {
+        return null;
+      }
+      return getArticleDetail(lessonArticleId);
+    },
+    {
+      ready: Boolean(lessonArticleId),
+    },
+  );
+
+  const sendRequest = useRequest(
+    async (content: string) => {
+      return sendAIChatMessage({
+        mode,
+        message: content,
+        article_id: mode === 'lesson' ? lessonArticleId : undefined,
+      });
+    },
+    {
+      manual: true,
+      onSuccess: (data, [content]) => {
+        setMessages((previous) => [
+          ...previous,
+          { id: `user-${Date.now()}`, role: 'user', content },
+          { id: `assistant-${Date.now()}`, role: 'assistant', content: data.reply },
+        ]);
+        setInput('');
+      },
+      onError: () => {
+        message.error(mode === 'lesson' ? '课文对话发送失败' : 'AI 求助发送失败');
+      },
+    },
+  );
+
+  const handleSend = async () => {
+    const trimmed = input.trim();
+    if (!trimmed) {
+      return;
+    }
+    if (mode === 'lesson' && !lessonArticleId) {
+      message.warning('当前还没有可用的课文上下文');
+      return;
+    }
+
+    const optimisticUserMessage: ChatMessage = {
+      id: `draft-${Date.now()}`,
+      role: 'user',
+      content: trimmed,
+    };
+    setMessages((previous) => [...previous, optimisticUserMessage]);
+    await sendRequest.runAsync(trimmed);
+    setMessages((previous) => previous.filter((item) => item.id !== optimisticUserMessage.id));
+  };
+
+  return (
+    <DashboardLayout>
+      <div className="mb-8">
+        <Title level={2} className="!mb-2 !font-black !text-gray-800">
+          AI 对话
+        </Title>
+        <Text className="text-base text-gray-500">
+          一个入口专门围绕课文练习，另一个入口处理更通用的表达求助。
+        </Text>
+      </div>
+
+      <Card className="mb-6 rounded-[32px] border-0 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
+        <Segmented<ChatMode>
+          block
+          value={mode}
+          onChange={setMode}
+          options={[
+            { label: '课文对话', value: 'lesson' },
+            { label: '通用求助', value: 'general' },
+          ]}
+        />
+
+        {mode === 'lesson' ? (
+          <div className="mt-5 rounded-3xl bg-amber-50 p-5">
+            {articleDetailRequest.data ? (
+              <>
+                <div className="mb-2 text-sm font-bold uppercase tracking-[0.16em] text-amber-500">当前课文</div>
+                <Title level={4} className="!mb-2 !text-gray-800">
+                  {articleDetailRequest.data.title}
+                </Title>
+                <Paragraph className="!mb-0 text-gray-600">
+                  这个模式下，AI 会尽量围绕当前课文的场景、新词和句型来帮助你。
+                </Paragraph>
+              </>
+            ) : (
+              <Empty description="还没有可用的课文上下文" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )}
+          </div>
+        ) : null}
+      </Card>
+
+      <Card className="rounded-[32px] border-0 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
+        <div className="mb-6 max-h-[520px] space-y-4 overflow-y-auto pr-2">
+          {messages.map((item) => (
+            <div
+              key={item.id}
+              className={`rounded-3xl px-5 py-4 ${
+                item.role === 'assistant'
+                  ? 'mr-12 bg-slate-50 text-gray-700'
+                  : 'ml-12 bg-gradient-to-r from-amber-500 to-orange-500 text-white'
+              }`}
+            >
+              <div className="mb-1 text-xs font-bold uppercase tracking-[0.16em] opacity-70">
+                {item.role === 'assistant' ? 'AI' : '我'}
+              </div>
+              <Paragraph className={`!mb-0 whitespace-pre-wrap ${item.role === 'assistant' ? 'text-gray-700' : 'text-white'}`}>
+                {item.content}
+              </Paragraph>
+            </div>
+          ))}
+        </div>
+
+        <Space.Compact className="w-full">
+          <Input.TextArea
+            value={input}
+            autoSize={{ minRows: 2, maxRows: 4 }}
+            onChange={(event) => setInput(event.target.value)}
+            onPressEnter={(event) => {
+              if (!event.shiftKey) {
+                event.preventDefault();
+                void handleSend();
+              }
+            }}
+            placeholder={mode === 'lesson' ? '问课文里的句子、单词、表达都可以' : '把你不会表达的中文或英文发给我'}
+          />
+          <Button
+            type="primary"
+            loading={sendRequest.loading}
+            className="h-auto border-0 bg-gradient-to-r from-amber-500 to-orange-500 px-8"
+            onClick={() => void handleSend()}
+          >
+            发送
+          </Button>
+        </Space.Compact>
+      </Card>
+    </DashboardLayout>
+  );
+}

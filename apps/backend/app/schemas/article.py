@@ -1,79 +1,71 @@
 """
-文章相关 Pydantic 模式
+文章相关 Pydantic 模型
 """
+
+from __future__ import annotations
 
 import datetime
 
 from pydantic import BaseModel, Field
 
-# ============ 基础组件 ============
-
 
 class BilingualContent(BaseModel):
-    """双语对照内容"""
+    """双语段落内容。"""
 
     en: str = Field(..., description="英文内容")
     zh: str = Field(..., description="中文翻译")
-    speaker: str | None = Field(None, description="说话人/角色 (如果是对话)")
+    speaker: str | None = Field(None, description="说话人")
 
 
 class GrammarPoint(BaseModel):
-    """语法点讲解"""
+    """语法讲解点。"""
 
     point: str = Field(..., description="语法点名称")
-    explanation: str = Field(..., description="详细讲解")
+    explanation: str = Field(..., description="中文解释")
     examples: list[BilingualContent] = Field(default_factory=list, description="例句")
 
 
 class CultureTip(BaseModel):
-    """文化差异提示"""
+    """导读或学习提示。"""
 
     title: str = Field(..., description="提示标题")
     content: str = Field(..., description="提示内容")
 
 
 class Exercise(BaseModel):
-    """练习题"""
+    """课后练习。"""
 
-    type: str = Field("choice", description="题目类型: 必须为 choice")
+    type: str = Field("choice", description="题型")
     question: str = Field(..., description="题目内容")
-    options: list[str] = Field(
-        ..., description="4个选项，例如 ['A. ...', 'B. ...', 'C. ...', 'D. ...']"
-    )
-    answer: str = Field(..., description="正确选项的完整内容，必须与options中的一项完全匹配")
+    options: list[str] = Field(default_factory=list, description="选项")
+    answer: str = Field(..., description="正确答案")
 
 
 class VocabularyWord(BaseModel):
-    """生词"""
+    """生词条目。"""
 
     word: str = Field(..., description="英文单词")
-    uk_phonetic: str | None = Field(None, description="英式音标，例如 /əˈbæn.dən/")
-    us_phonetic: str | None = Field(None, description="美式音标，例如 /əˈbæn.dən/")
+    uk_phonetic: str | None = Field(None, description="英式音标")
+    us_phonetic: str | None = Field(None, description="美式音标")
     meaning: str = Field(..., description="中文释义")
 
 
-# ============ 文章数据结构 ============
-
-
 class ArticleContent(BaseModel):
-    """文章完整数据结构 (AI生成)"""
+    """文章完整内容。"""
 
     title: str = Field(..., description="文章标题")
     level: int = Field(..., ge=0, le=6, description="难度等级")
-    source_book: int = Field(..., description="参考新概念第几册")
-    source_lesson: int = Field(..., description="参考新概念第几课")
-    vocabulary: list[VocabularyWord] = Field(..., description="生词列表")
-    content: list[BilingualContent] = Field(..., description="双语对照内容(段落列表)")
-    grammar: list[GrammarPoint] = Field(..., description="语法讲解")
-    tips: list[CultureTip] = Field(..., description="文化差异Tips")
+    source_book: int | None = Field(None, description="来源册数")
+    source_lesson: int | None = Field(None, description="来源课次")
+    vocabulary: list[VocabularyWord] = Field(default_factory=list, description="生词列表")
+    content: list[BilingualContent] = Field(default_factory=list, description="正文内容")
+    grammar: list[GrammarPoint] = Field(default_factory=list, description="语法讲解")
+    tips: list[CultureTip] = Field(default_factory=list, description="导读与提示")
     exercises: list[Exercise] | None = Field(None, description="课后练习")
 
 
-# ============ API 请求/响应 ============
-
-
 class ArticleResponse(BaseModel):
-    """文章响应"""
+    """文章响应。"""
 
     id: int
     title: str
@@ -94,7 +86,7 @@ class ArticleResponse(BaseModel):
 
 
 class ArticleListItem(BaseModel):
-    """文章列表项"""
+    """文章列表项。"""
 
     id: int
     title: str
@@ -107,35 +99,54 @@ class ArticleListItem(BaseModel):
 
 
 class ArticleListResponse(BaseModel):
-    """文章列表响应"""
+    """文章列表响应。"""
 
     items: list[ArticleListItem]
     total: int
 
 
 class TodayArticleResponse(BaseModel):
-    """今日文章响应"""
+    """今日文章响应。"""
 
-    has_article: bool = Field(..., description="是否有今日文章")
-    article: ArticleResponse | None = Field(None, description="文章详情")
+    has_article: bool = Field(..., description="是否存在今日文章")
+    article: ArticleResponse | None = Field(None, description="文章内容")
 
 
 class GenerateArticleRequest(BaseModel):
-    """生成文章请求"""
+    """生成文章请求。"""
 
-    target_date: datetime.date | None = Field(None, description="指定日期，默认为今天")
-    force_regenerate: bool = Field(False, description="强制重新生成")
+    target_date: datetime.date | None = Field(None, description="目标日期")
+    force_regenerate: bool = Field(False, description="是否强制重新生成")
+    feedback_reason: str | None = Field(None, description="重新生成原因")
+    feedback_comment: str | None = Field(None, description="补充反馈")
+
+
+class ExerciseResultItem(BaseModel):
+    """课后练习结果。"""
+
+    question: str = Field(..., description="题目内容")
+    expected_answer: str = Field(..., description="正确答案")
+    user_answer: str | None = Field(None, description="用户答案")
+    is_correct: bool = Field(..., description="是否答对")
 
 
 class UpdateProgressRequest(BaseModel):
-    """更新阅读进度请求"""
+    """更新阅读进度请求。"""
 
-    is_read: int = Field(..., ge=0, le=100, description="阅读进度百分比")
+    is_read: int = Field(..., ge=0, le=100, description="阅读进度")
     is_completed: bool | None = Field(None, description="是否完成")
+    exercise_results: list[ExerciseResultItem] | None = Field(None, description="练习结果")
+
+
+class RegenerateArticleRequest(BaseModel):
+    """文章重生成反馈。"""
+
+    feedback_reason: str = Field(..., description="反馈原因")
+    feedback_comment: str | None = Field(None, description="补充说明")
 
 
 class SubmitExerciseRequest(BaseModel):
-    """提交练习答案请求"""
+    """提交单题练习答案。"""
 
-    exercise_index: int = Field(..., ge=0, description="练习题索引")
+    exercise_index: int = Field(..., ge=0, description="题目索引")
     answer: str = Field(..., description="用户答案")

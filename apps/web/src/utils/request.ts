@@ -23,7 +23,10 @@ const request: AxiosInstance = axios.create({
 // 是否正在刷新 Token
 let isRefreshing = false;
 // 等待 Token 刷新的请求队列
-let refreshSubscribers: Array<(token: string) => void> = [];
+let refreshSubscribers: Array<{
+  resolve: (token: string) => void;
+  reject: (error: Error) => void;
+}> = [];
 
 /**
  * 获取存储的 access token
@@ -59,15 +62,26 @@ export function clearTokens(): void {
 /**
  * 订阅 Token 刷新
  */
-function subscribeTokenRefresh(callback: (token: string) => void): void {
-  refreshSubscribers.push(callback);
+function subscribeTokenRefresh(
+  resolve: (token: string) => void,
+  reject: (error: Error) => void,
+): void {
+  refreshSubscribers.push({ resolve, reject });
 }
 
 /**
  * 通知所有订阅者 Token 已刷新
  */
 function onTokenRefreshed(newToken: string): void {
-  refreshSubscribers.forEach((callback) => callback(newToken));
+  refreshSubscribers.forEach((subscriber) => subscriber.resolve(newToken));
+  refreshSubscribers = [];
+}
+
+/**
+ * 通知所有订阅者 Token 刷新失败
+ */
+function onTokenRefreshFailed(error: Error): void {
+  refreshSubscribers.forEach((subscriber) => subscriber.reject(error));
   refreshSubscribers = [];
 }
 
@@ -132,11 +146,11 @@ request.interceptors.response.use(
 
       // 如果正在刷新，等待刷新完成
       if (isRefreshing) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
           subscribeTokenRefresh((token) => {
             originalRequest.headers.Authorization = `Bearer ${token}`;
             resolve(request(originalRequest));
-          });
+          }, reject);
         });
       }
 
@@ -153,10 +167,11 @@ request.interceptors.response.use(
         return request(originalRequest);
       } catch {
         isRefreshing = false;
-        refreshSubscribers = [];
+        const refreshError = new Error('登录已过期，请重新登录');
+        onTokenRefreshFailed(refreshError);
         clearTokens();
         redirectToLogin();
-        return Promise.reject(new Error('登录已过期，请重新登录'));
+        return Promise.reject(refreshError);
       }
     }
 
