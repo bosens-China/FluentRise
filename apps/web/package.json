@@ -14,7 +14,10 @@
   "dependencies": {
     "@ant-design/icons": "^6.1.0",
     "@tailwindcss/typography": "^0.5.19",
+    "@tanstack/react-query": "^5.95.0",
     "@tanstack/react-router": "^1.166.2",
+    "@toast-ui/editor": "^3.2.2",
+    "@toast-ui/react-editor": "^3.2.3",
     "ahooks": "^3.9.6",
     "antd": "^6.3.2",
     "axios": "^1.13.6",
@@ -26,6 +29,7 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-markdown": "^10.1.0",
+    "react-media-recorder": "^1.7.2",
     "tailwind-merge": "^3.0.2",
     "zustand": "^5.0.11"
   },

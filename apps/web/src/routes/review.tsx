@@ -1,63 +1,120 @@
+import { useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
-import { 
-  BookOpen, 
-  Flame, 
-  Calendar, 
-  CheckCircle, 
-  Clock, 
-  Trophy,
-  Zap,
-  ChevronRight
-} from 'lucide-react';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { AuthGuard } from '@/components/providers';
-import { Card, Button, Badge, Tabs, Empty, LoadingSpinner } from '@/components/ui';
-import { CircularProgress } from '@/components/ui/Progress';
-import { useQuery } from '@/hooks/useData';
 import {
-  getTodayReviews,
-  getReviewStats,
+  BookOpen,
+  Calendar,
+  CheckCircle,
+  ChevronRight,
+  Clock3,
+  Flame,
+  History,
+  RotateCcw,
+} from 'lucide-react';
+
+import { getArticleHistory } from '@/api/article';
+import {
   formatReviewDueText,
   getReviewProgress,
+  getReviewStats,
+  getTodayReviews,
   type ReviewItem,
 } from '@/api/review';
-import { getArticleHistory } from '@/api/article';
+import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { AuthGuard } from '@/components/providers';
+import { ReviewLogDrawer } from '@/components/review/ReviewLogDrawer';
+import {
+  Badge,
+  Button,
+  Card,
+  CircularProgress,
+  Empty,
+  LoadingSpinner,
+  Tabs,
+} from '@/components/ui';
+import { useQuery } from '@/hooks/useData';
 import { formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/review')({
   component: ReviewPage,
 });
 
-// 阶段颜色映射
-const stageColors: Record<number, { bg: string; text: string }> = {
-  1: { bg: 'bg-blue-100', text: 'text-blue-700' },
-  2: { bg: 'bg-cyan-100', text: 'text-cyan-700' },
-  3: { bg: 'bg-indigo-100', text: 'text-indigo-700' },
-  4: { bg: 'bg-purple-100', text: 'text-purple-700' },
-  5: { bg: 'bg-pink-100', text: 'text-pink-700' },
-  6: { bg: 'bg-rose-100', text: 'text-rose-700' },
-  7: { bg: 'bg-orange-100', text: 'text-orange-700' },
+const stageBadgeToneMap: Record<number, 'default' | 'secondary' | 'accent' | 'success'> = {
+  1: 'default',
+  2: 'secondary',
+  3: 'secondary',
+  4: 'accent',
+  5: 'accent',
+  6: 'success',
+  7: 'success',
+};
+
+const stageProgressToneMap: Record<number, 'primary' | 'secondary' | 'accent' | 'success'> = {
+  1: 'primary',
+  2: 'secondary',
+  3: 'secondary',
+  4: 'accent',
+  5: 'accent',
+  6: 'success',
+  7: 'success',
 };
 
 function ReviewPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('today');
   const [historyPage, setHistoryPage] = useState(1);
+  const [selectedReview, setSelectedReview] = useState<ReviewItem | null>(null);
 
-  // 获取今日复习列表
   const { data: todayData, loading: todayLoading } = useQuery(getTodayReviews);
-
-  // 获取复习统计
   const { data: stats } = useQuery(getReviewStats);
-
-  // 获取历史文章
   const { data: historyData, loading: historyLoading } = useQuery(
     () => getArticleHistory(historyPage, 12),
-    { ready: activeTab === 'history' }
+    { ready: activeTab === 'history' },
   );
 
-  // 开始复习
+  const statCards = useMemo(() => {
+    if (!stats) {
+      return [];
+    }
+
+    return [
+      {
+        key: 'pending',
+        label: '今日待复习',
+        value: stats.today_pending,
+        suffix: '项',
+        icon: Clock3,
+        variant: 'accent' as const,
+      },
+      {
+        key: 'streak',
+        label: '连续复习',
+        value: stats.streak_days,
+        suffix: '天',
+        icon: Flame,
+        variant: 'secondary' as const,
+      },
+      {
+        key: 'weekly',
+        label: '本周完成',
+        value: `${stats.weekly_completed}/${stats.weekly_total}`,
+        suffix: '',
+        icon: CheckCircle,
+        variant: 'success' as const,
+      },
+      {
+        key: 'completed',
+        label: '总完成率',
+        value:
+          stats.total_schedules > 0
+            ? Math.round((stats.completed_schedules / stats.total_schedules) * 100)
+            : 0,
+        suffix: '%',
+        icon: RotateCcw,
+        variant: 'primary' as const,
+      },
+    ];
+  }, [stats]);
+
   const startReview = (item: ReviewItem) => {
     navigate({
       to: '/article/$articleId',
@@ -66,45 +123,6 @@ function ReviewPage() {
     });
   };
 
-  // 统计卡片数据
-  const statCards = stats ? [
-    {
-      icon: Clock,
-      label: '今日待复习',
-      value: stats.today_pending,
-      suffix: '个',
-      color: 'var(--accent)',
-      bgColor: 'var(--accent-light)',
-    },
-    {
-      icon: Flame,
-      label: '连续打卡',
-      value: stats.streak_days,
-      suffix: '天',
-      color: 'var(--error)',
-      bgColor: 'var(--error-light)',
-    },
-    {
-      icon: CheckCircle,
-      label: '本周完成',
-      value: `${stats.weekly_completed}/${stats.weekly_total}`,
-      suffix: '',
-      color: 'var(--secondary)',
-      bgColor: 'var(--secondary-light)',
-    },
-    {
-      icon: Trophy,
-      label: '总完成率',
-      value: stats.total_schedules > 0 
-        ? Math.round((stats.completed_schedules / stats.total_schedules) * 100)
-        : 0,
-      suffix: '%',
-      color: 'var(--success)',
-      bgColor: 'var(--success-light)',
-    },
-  ] : [];
-
-  // 渲染今日复习列表
   const renderTodayReviews = () => {
     if (todayLoading) {
       return (
@@ -114,80 +132,71 @@ function ReviewPage() {
       );
     }
 
-    const items = todayData?.items || [];
-
+    const items = todayData?.items ?? [];
     if (items.length === 0) {
       return (
         <Empty
-          title="今天没有复习任务"
-          description="完成新课程学习后，系统会自动为你安排复习计划"
-          icon={<Zap className="h-10 w-10" />}
+          title="今天没有到期复习"
+          description="完成新课后，系统会按节奏自动安排下一轮复习。"
+          icon={<History className="h-10 w-10" />}
+          action={{
+            label: '回到学习中心',
+            onClick: () => navigate({ to: '/' }),
+          }}
         />
       );
     }
 
     return (
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => {
-          const stageColor = stageColors[item.stage] || stageColors[1];
           const progress = getReviewProgress(item.stage);
+          const badgeTone = stageBadgeToneMap[item.stage] || 'default';
+          const progressTone = stageProgressToneMap[item.stage] || 'primary';
 
-            {/* 标题 */}
-            <h3 className="font-bold text-lg text-gray-800 mb-3 group-hover:text-indigo-600 transition-colors line-clamp-2">
-              {item.title}
-            </h3>
-
-            {/* 信息 */}
-            <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-              <CalendarOutlined />
-              <span>复习状态：{formatReviewDueText(item.days_until_next)}</span>
-              {item.last_reviewed_at && (
-                <>
-                  <span className="mx-1">·</span>
-                  <span>已复习 {item.stage - 1} 次</span>
-                </>
-              )}
-            </div>
-
-            {/* 按钮 */}
-            <Button
-              type="primary"
-              block
-              size="large"
-              className="rounded-xl font-bold"
-              icon={<ReadOutlined />}
-            >
-              {/* 顶部：阶段和进度 */}
-              <div className="flex items-center justify-between mb-4">
-                <span className={`px-3 py-1 rounded-full font-bold text-sm ${stageColor.bg} ${stageColor.text}`}>
-                  第{item.stage}轮
-                </span>
-                <div className="relative">
-                  <CircularProgress
-                    value={progress}
-                    size={48}
-                    strokeWidth={4}
-                    variant="primary"
-                  />
-                </div>
+          return (
+            <Card key={item.schedule_id} className="p-5">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <Badge variant={badgeTone}>第 {item.stage}/7 轮</Badge>
+                <CircularProgress
+                  value={progress}
+                  size={52}
+                  strokeWidth={5}
+                  variant={progressTone}
+                />
               </div>
 
-              {/* 标题 */}
-              <h3 className="font-bold text-lg text-[var(--text-primary)] mb-3 line-clamp-2">
+              <h3 className="mb-3 line-clamp-2 text-lg font-black text-[var(--text-primary)]">
                 {item.title}
               </h3>
 
-              {/* 信息 */}
-              <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)] mb-4">
-                <Calendar className="h-4 w-4" />
-                <span>下次复习：{getStageInterval(item.stage)}</span>
+              <div className="space-y-2 text-sm text-[var(--text-secondary)]">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  <span>{formatReviewDueText(item.days_until_next)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4" />
+                  <span>{item.stage_label}</span>
+                </div>
+                {item.last_reviewed_at ? (
+                  <div className="text-xs text-[var(--text-tertiary)]">
+                    上次复习：{formatDate(item.last_reviewed_at)}
+                  </div>
+                ) : null}
               </div>
 
-              {/* 按钮 */}
-              <Button fullWidth>
-                <BookOpen className="h-5 w-5" />
-                开始复习
-              </Button>
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
+                <Badge variant="outline">Level {item.level}</Badge>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedReview(item)}>
+                    查看记录
+                  </Button>
+                  <Button size="sm" onClick={() => startReview(item)}>
+                    开始复习
+                  </Button>
+                </div>
+              </div>
             </Card>
           );
         })}
@@ -195,7 +204,6 @@ function ReviewPage() {
     );
   };
 
-  // 渲染历史文章
   const renderHistory = () => {
     if (historyLoading) {
       return (
@@ -205,15 +213,22 @@ function ReviewPage() {
       );
     }
 
-    const items = historyData?.items || [];
-
+    const items = historyData?.items ?? [];
     if (items.length === 0) {
-      return <Empty title="暂无学习记录" />;
+      return (
+        <Empty
+          title="暂时还没有学习历史"
+          description="完成主课后，这里会逐步沉淀你的历史课文。"
+          icon={<BookOpen className="h-10 w-10" />}
+        />
+      );
     }
+
+    const hasNextPage = historyData ? historyPage * 12 < historyData.total : false;
 
     return (
       <>
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {items.map((item) => (
             <Card
               key={item.id}
@@ -227,21 +242,21 @@ function ReviewPage() {
                 })
               }
             >
-              <div className="flex items-start justify-between mb-3">
-                <Badge variant={item.is_completed ? 'success' : 'default'}>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <Badge variant={item.is_completed ? 'success' : 'outline'}>
                   {item.is_completed ? '已完成' : '进行中'}
                 </Badge>
-                <span className="text-[var(--text-tertiary)] text-sm">
+                <span className="text-sm text-[var(--text-tertiary)]">
                   {formatDate(item.publish_date)}
                 </span>
               </div>
 
-              <h3 className="font-bold text-[var(--text-primary)] line-clamp-2 mb-4">
+              <h3 className="mb-4 line-clamp-2 text-lg font-bold text-[var(--text-primary)]">
                 {item.title}
               </h3>
 
-              <div className="flex items-center justify-between pt-4 border-t border-[var(--border)]">
-                <Badge variant="outline">Level {item.level}</Badge>
+              <div className="flex items-center justify-between border-t border-[var(--border)] pt-4">
+                <Badge variant="secondary">Level {item.level}</Badge>
                 <Button variant="ghost" size="sm">
                   查看
                   <ChevronRight className="h-4 w-4" />
@@ -251,30 +266,29 @@ function ReviewPage() {
           ))}
         </div>
 
-        {/* Pagination */}
-        {historyData && historyData.total > 12 && (
-          <div className="flex justify-center gap-2 mt-8">
+        {historyData && historyData.total > 12 ? (
+          <div className="mt-8 flex justify-center gap-3">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
               disabled={historyPage === 1}
+              onClick={() => setHistoryPage((page) => Math.max(1, page - 1))}
             >
               上一页
             </Button>
-            <span className="px-4 py-2 font-medium text-[var(--text-secondary)]">
+            <div className="flex items-center px-3 text-sm font-medium text-[var(--text-secondary)]">
               第 {historyPage} 页
-            </span>
+            </div>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setHistoryPage((p) => p + 1)}
-              disabled={items.length < 12}
+              disabled={!hasNextPage}
+              onClick={() => setHistoryPage((page) => page + 1)}
             >
               下一页
             </Button>
           </div>
-        )}
+        ) : null}
       </>
     );
   };
@@ -284,13 +298,11 @@ function ReviewPage() {
       id: 'today',
       label: (
         <span className="flex items-center gap-2">
-          <Zap className="h-4 w-4" />
+          <RotateCcw className="h-4 w-4" />
           今日复习
-          {stats && stats.today_pending > 0 && (
-            <Badge variant="error" size="sm">{stats.today_pending}</Badge>
-          )}
         </span>
       ),
+      badge: stats?.today_pending || 0,
       content: renderTodayReviews(),
     },
     {
@@ -308,54 +320,53 @@ function ReviewPage() {
   return (
     <AuthGuard>
       <DashboardLayout>
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-[var(--accent)] to-orange-500 flex items-center justify-center text-white shadow-lg">
-              <Flame className="h-6 w-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-[var(--text-primary)]">
-                复习中心
-              </h1>
-              <p className="text-sm text-[var(--text-secondary)]">
-                艾宾浩斯遗忘曲线助力，科学复习
-              </p>
-            </div>
+        <div className="mb-8 flex items-center gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--primary)] text-white shadow-[var(--shadow-button)]">
+            <RotateCcw className="h-7 w-7" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-[var(--text-primary)]">复习中心</h1>
+            <p className="text-sm text-[var(--text-secondary)]">
+              按节奏稳步回顾，让已经学过的内容真正留下来。
+            </p>
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {statCards.map((stat) => (
-            <Card key={stat.label} className="p-4">
+        <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {statCards.map((item) => (
+            <Card key={item.key} className="p-4">
               <div className="flex items-center gap-3">
                 <div
-                  className="h-10 w-10 rounded-xl flex items-center justify-center"
-                  style={{ backgroundColor: stat.bgColor, color: stat.color }}
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl"
+                  style={{
+                    backgroundColor: `var(--${item.variant}-light)`,
+                    color: `var(--${item.variant})`,
+                  }}
                 >
-                  <stat.icon className="h-5 w-5" />
+                  <item.icon className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-xs text-[var(--text-secondary)]">{stat.label}</p>
-                  <p className="text-xl font-black text-[var(--text-primary)]">
-                    {stat.value}{stat.suffix}
-                  </p>
+                  <div className="text-xs text-[var(--text-secondary)]">{item.label}</div>
+                  <div className="text-xl font-black text-[var(--text-primary)]">
+                    {item.value}
+                    {item.suffix}
+                  </div>
                 </div>
               </div>
             </Card>
           ))}
         </div>
 
-        {/* Tabs */}
-        <Card>
-          <Tabs
-            tabs={tabs}
-            activeTab={activeTab}
-            onChange={setActiveTab}
-            variant="default"
-          />
+        <Card className="p-6">
+          <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
         </Card>
+
+        <ReviewLogDrawer
+          open={selectedReview != null}
+          scheduleId={selectedReview?.schedule_id ?? null}
+          title={selectedReview?.title ?? '复习记录'}
+          onClose={() => setSelectedReview(null)}
+        />
       </DashboardLayout>
     </AuthGuard>
   );

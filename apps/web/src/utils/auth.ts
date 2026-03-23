@@ -1,38 +1,22 @@
 /**
- * 认证工具函数
+ * 认证工具函数。
+ * 这里保留兼容导出，实际逻辑统一走 auth-storage。
  */
 
-/**
- * 检查用户是否已登录
- */
+import {
+  clearTokens,
+  getStoredUserInfo,
+  isAuthenticated,
+} from '@/lib/auth-storage';
+
 export function isLoggedIn(): boolean {
-  if (typeof window === 'undefined') return false;
-  const token = localStorage.getItem('access_token');
-  return !!token;
+  return isAuthenticated();
 }
 
-/**
- * 获取存储的用户信息
- */
 export function getUserInfo(): { phone: string; nickname?: string } | null {
-  if (typeof window === 'undefined') return null;
-  const userInfo = localStorage.getItem('user_info');
-  if (userInfo) {
-    try {
-      return JSON.parse(userInfo);
-    } catch {
-      return null;
-    }
-  }
-  return null;
+  return getStoredUserInfo<{ phone: string; nickname?: string }>();
 }
 
-/**
- * 清除登录状态
- */
 export function clearAuth(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem('access_token');
-  localStorage.removeItem('refresh_token');
-  localStorage.removeItem('user_info');
+  clearTokens();
 }

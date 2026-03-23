@@ -20,7 +20,7 @@ export function Tooltip({
 }: TooltipProps) {
   const [isVisible, setIsVisible] = React.useState(false);
   const [isMounted, setIsMounted] = React.useState(false);
-  const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const show = () => {
     setIsMounted(true);

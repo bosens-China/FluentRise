@@ -7,10 +7,9 @@ from __future__ import annotations
 from typing import Any
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-from pydantic import SecretStr
 
 from app.core.config import settings
+from app.services.llm_factory import build_chat_model
 
 
 class AIChatService:
@@ -18,12 +17,7 @@ class AIChatService:
 
     def __init__(self) -> None:
         self.enabled = bool(settings.OPENAI_API_KEY)
-        self.llm = ChatOpenAI(
-            model=settings.OPENAI_MODEL,
-            api_key=SecretStr(settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None,
-            base_url=settings.OPENAI_BASE_URL,
-            temperature=0.5,
-        )
+        self.llm = build_chat_model(temperature=0.5)
 
     async def reply(
         self,

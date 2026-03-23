@@ -4,15 +4,8 @@ import {
   useNavigate,
   useSearch,
 } from '@tanstack/react-router';
-import { useRequest } from 'ahooks';
-import { App, Button, Spin, Typography, Result } from 'antd';
+import { App, Button, Result, Spin, Typography } from 'antd';
 
-import {
-  ArticlePageActions,
-  ArticlePageModals,
-  ArticlePageStatusPanels,
-  ArticleReader,
-} from '@/components/article';
 import {
   generateArticleAudio,
   generateTodayArticle,
@@ -22,15 +15,23 @@ import {
   updateArticleProgress,
 } from '@/api/article';
 import {
-  type SubmitReviewResponse,
   getArticleReviewStatus,
+  type SubmitReviewResponse,
 } from '@/api/review';
 import {
   systemApi,
   type EncouragementResponse,
   type Quote,
 } from '@/api/system';
+import {
+  ArticlePageActions,
+  ArticlePageModals,
+  ArticlePageStatusPanels,
+  ArticleReader,
+} from '@/components/article';
 import type { FeedbackReason } from '@/components/article/ArticlePageModals';
+import { useAudioPlayer } from '@/hooks/useAudioPlayer';
+import { useMutation, useQuery } from '@/hooks/useData';
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -48,6 +49,11 @@ function ArticlePage() {
   const isToday = articleId === 'today';
   const scheduleId = search.review ? Number(search.review) : null;
   const isReviewMode = Boolean(scheduleId);
+  const {
+    play: playReviewAudioFile,
+    stop: stopReviewAudio,
+    isPlaying: reviewAudioPlaying,
+  } = useAudioPlayer();
 
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackReason, setFeedbackReason] =
@@ -75,7 +81,6 @@ function ArticlePage() {
   } | null>(null);
   const [reviewStartTime] = useState(() => (isReviewMode ? Date.now() : 0));
   const [reviewEndTime, setReviewEndTime] = useState<number | null>(null);
-  const [reviewAudioPlaying, setReviewAudioPlaying] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -95,9 +100,9 @@ function ArticlePage() {
       URL.revokeObjectURL(reviewAudioUrl);
       setReviewAudioUrl(null);
     }
+    stopReviewAudio();
     setReviewAudioLoading(false);
-    setReviewAudioPlaying(false);
-  }, [articleId, isReviewMode]);
+  }, [articleId, isReviewMode, reviewAudioUrl, stopReviewAudio]);
 
   const durationSeconds = useMemo(() => {
     if (!isReviewMode || !reviewEndTime) {
@@ -106,7 +111,7 @@ function ArticlePage() {
     return Math.max(0, Math.floor((reviewEndTime - reviewStartTime) / 1000));
   }, [isReviewMode, reviewEndTime, reviewStartTime]);
 
-  useRequest(() => systemApi.getQuotes(8), {
+  useQuery(() => systemApi.getQuotes(8), {
     ready: isToday,
     onSuccess: (data) => setQuotes(data),
   });
@@ -121,7 +126,7 @@ function ArticlePage() {
     return () => window.clearInterval(timer);
   }, [quotes]);
 
-  const articleRequest = useRequest(
+  const articleRequest = useQuery(
     async () => {
       if (isToday) {
         return generateTodayArticle();
@@ -138,7 +143,7 @@ function ArticlePage() {
     },
   );
 
-  const reviewStatusRequest = useRequest(
+  const reviewStatusRequest = useQuery(
     () => getArticleReviewStatus(Number(articleId)),
     {
       ready: isReviewMode && !isToday,
@@ -154,6 +159,8 @@ function ArticlePage() {
       },
     },
   );
+
+  const currentArticle = articleRequest.data as Article | undefined;
 
   const playReviewAudio = async () => {
     if (!currentArticle) {
@@ -173,25 +180,19 @@ function ArticlePage() {
         });
       }
 
-      const audio = new Audio(nextUrl);
-      setReviewAudioPlaying(true);
-      audio.onended = () => setReviewAudioPlaying(false);
-      audio.onerror = () => {
-        setReviewAudioPlaying(false);
-        message.error('课文音频播放失败，请稍后再试');
-      };
-      void audio.play().catch(() => {
-        setReviewAudioPlaying(false);
-        message.error('课文音频播放失败，请稍后再试');
+      await playReviewAudioFile(nextUrl, {
+        onError: () => {
+          message.error('课文音频播放失败，请稍后重试');
+        },
       });
     } catch {
-      message.error('课文音频生成失败，请稍后再试');
+      message.error('课文音频生成失败，请稍后重试');
     } finally {
       setReviewAudioLoading(false);
     }
   };
 
-  const updateProgressRequest = useRequest(
+  const updateProgressRequest = useMutation(
     async (
       progress: number,
       completed: boolean,
@@ -208,7 +209,6 @@ function ArticlePage() {
       );
     },
     {
-      manual: true,
       onSuccess: async (_data, params) => {
         const [, completed, results] = params;
         if (!completed || isReviewMode || !articleRequest.data) {
@@ -240,16 +240,14 @@ function ArticlePage() {
     },
   );
 
-  const regenerateRequest = useRequest(
-    async () => {
-      return generateTodayArticle({
+  const regenerateRequest = useMutation(
+    async () =>
+      generateTodayArticle({
         forceRegenerate: true,
         feedbackReason,
         feedbackComment: feedbackComment || undefined,
-      });
-    },
+      }),
     {
-      manual: true,
       onSuccess: () => {
         message.success('已经根据你的反馈重新生成今天的课文');
         setFeedbackOpen(false);
@@ -257,12 +255,10 @@ function ArticlePage() {
         void articleRequest.refresh();
       },
       onError: () => {
-        message.error('重新生成失败，请稍后再试');
+        message.error('重新生成失败，请稍后重试');
       },
     },
   );
-
-  const currentArticle = articleRequest.data as Article | undefined;
 
   const reviewState = useMemo(() => {
     if (!previewAssessment) {
@@ -318,19 +314,11 @@ function ArticlePage() {
         <ArticlePageActions
           isReviewMode={isReviewMode}
           isToday={isToday}
-          articleId={currentArticle.id}
           onBackHome={() => navigate({ to: '/' })}
           onOpenFeedback={() => setFeedbackOpen(true)}
-          onOpenAIChat={(nextArticleId) =>
-            navigate({
-              to: '/ai-chat',
-              search: { articleId: nextArticleId, mode: 'lesson' } as never,
-            })
-          }
         />
 
         <ArticlePageStatusPanels
-          article={currentArticle}
           isReviewMode={isReviewMode}
           reviewStage={reviewStage}
           nextReviewDate={reviewStatusRequest.data?.next_review_date || null}
@@ -338,12 +326,6 @@ function ArticlePage() {
           showWakeupPrompt={showWakeupPrompt}
           reviewAudioLoading={reviewAudioLoading}
           reviewAudioPlaying={reviewAudioPlaying}
-          onOpenAIChat={(nextArticleId) =>
-            navigate({
-              to: '/ai-chat',
-              search: { articleId: nextArticleId, mode: 'lesson' } as never,
-            })
-          }
           onPlayReviewAudio={() => {
             void playReviewAudio();
           }}
@@ -371,7 +353,7 @@ function ArticlePage() {
       </div>
 
       <ArticlePageModals
-        articleTitle={currentArticle.title}
+        article={currentArticle}
         feedbackOpen={feedbackOpen}
         feedbackReason={feedbackReason}
         feedbackComment={feedbackComment}
@@ -395,6 +377,10 @@ function ArticlePage() {
           void regenerateRequest.run();
         }}
         onCloseEncouragement={() => setEncouragementOpen(false)}
+        onReturnHome={() => {
+          setEncouragementOpen(false);
+          navigate({ to: '/' });
+        }}
         onPreviewConfirm={(assessment) => {
           setPreviewAssessment(assessment);
           setShowPreviewModal(false);

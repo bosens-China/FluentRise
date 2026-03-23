@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { useRequest } from 'ahooks';
 import { Alert, App, Button, Col, Row, Typography } from 'antd';
@@ -21,7 +21,6 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { ReviewReminderModal } from '@/components/review/ReviewReminderModal';
 import { StudyCalendar } from '@/components/studyLog/StudyCalendar';
 import { useCurrentUser } from '@/hooks/useAuth';
-import { isAuthenticated } from '@/utils/request';
 
 const { Text, Title } = Typography;
 
@@ -37,17 +36,6 @@ const GOAL_LABELS: Record<string, string> = {
   exam: '考试准备',
   parent: '亲子陪伴',
   hobby: '兴趣拓展',
-};
-
-// 学习目标映射
-const goalLabels: Record<string, string> = {
-  daily: '日常交流',
-  work: '工作提升',
-  study: '出国留学',
-  travel: '旅游出行',
-  exam: '考试准备',
-  hobby: '兴趣爱好',
-  parent: '亲子教育',
 };
 
 function HomePage() {
@@ -255,6 +243,7 @@ function HomePage() {
 
       <AssessmentModal
         open={showAssessment || Boolean(needsAssessment)}
+        mode={hasCompletedAssessment ? 'update' : 'create'}
         onClose={() => {
           if (hasCompletedAssessment) {
             setShowAssessment(false);

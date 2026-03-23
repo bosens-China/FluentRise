@@ -1,5 +1,5 @@
 """
-应用配置管理
+应用配置管理。
 """
 
 from functools import lru_cache
@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """应用配置类"""
+    """应用配置类。"""
 
     # 应用信息
     APP_NAME: str = "FluentRise Backend"
@@ -19,8 +19,8 @@ class Settings(BaseSettings):
 
     # 安全
     SECRET_KEY: str = "your-secret-key-change-in-production"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7天
-    REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 15  # 15天内免登录
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # 30分钟
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7天
 
     # 数据库
     DATABASE_URL: str = (
@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "deepseek-chat"
     OPENAI_BASE_URL: str = "https://api.deepseek.com"
+
+    # DashScope Speech
+    DASHSCOPE_API_KEY: str = ""
+    DASHSCOPE_REALTIME_MODEL: str = "qwen3-asr-flash-realtime-2026-02-10"
+    SPEECH_TARGET_DURATION_SECONDS: int = 60
+    SPEECH_HARD_MAX_DURATION_SECONDS: int = 65
 
     # 验证码
     SMS_CODE_EXPIRE_SECONDS: int = 300  # 5分钟
@@ -67,7 +73,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """获取配置实例（缓存）"""
+    """获取配置实例。"""
     return Settings()
 
 

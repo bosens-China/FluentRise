@@ -7,10 +7,10 @@ from __future__ import annotations
 import random
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel
 
 from app.core.config import settings
+from app.services.llm_factory import build_chat_model
 
 
 class EncouragementResult(BaseModel):
@@ -41,12 +41,7 @@ class EncouragementService:
 
     def __init__(self) -> None:
         self.enabled = bool(settings.OPENAI_API_KEY)
-        self.llm = ChatOpenAI(
-            model=settings.OPENAI_MODEL,
-            api_key=SecretStr(settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None,
-            base_url=settings.OPENAI_BASE_URL,
-            temperature=0.7,
-        )
+        self.llm = build_chat_model(temperature=0.7)
         self.structured_llm = self.llm.with_structured_output(
             EncouragementResult,
             method="function_calling",

@@ -54,12 +54,27 @@ ENGLISH_LEVELS = {
 }
 
 LEARNING_GOALS = [
-    {"id": "daily", "label": "日常交流", "icon": "💬", "description": "朋友聊天、家庭生活、基础社交"},
+    {
+        "id": "daily",
+        "label": "日常交流",
+        "icon": "💬",
+        "description": "朋友聊天、家庭生活、基础社交",
+    },
     {"id": "travel", "label": "旅游出行", "icon": "✈️", "description": "机场、酒店、问路、点餐"},
     {"id": "work", "label": "办公需求", "icon": "💼", "description": "邮件、会议、职业沟通"},
     {"id": "study", "label": "学习提升", "icon": "📚", "description": "课堂、留学、阅读训练"},
-    {"id": "exam", "label": "考试准备", "icon": "📝", "description": "学校考试、语言考试、阶段复习"},
-    {"id": "parent", "label": "亲子陪伴", "icon": "👨‍👩‍👧", "description": "辅导孩子、家庭英语启蒙"},
+    {
+        "id": "exam",
+        "label": "考试准备",
+        "icon": "📝",
+        "description": "学校考试、语言考试、阶段复习",
+    },
+    {
+        "id": "parent",
+        "label": "亲子陪伴",
+        "icon": "👨‍👩‍👧",
+        "description": "辅导孩子、家庭英语启蒙",
+    },
     {"id": "hobby", "label": "兴趣拓展", "icon": "🎧", "description": "歌曲、影视、兴趣内容"},
 ]
 
@@ -97,6 +112,10 @@ class SendSmsCodeRequest(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str = Field(..., description="刷新令牌")
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str | None = Field(default=None, description="用于注销的刷新令牌")
 
 
 class UpdateProfileRequest(BaseModel):

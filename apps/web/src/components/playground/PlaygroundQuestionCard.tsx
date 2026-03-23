@@ -5,22 +5,15 @@ import {
 } from '@ant-design/icons';
 import { Button, Card, Input, Tag, Typography } from 'antd';
 
-import type { Question, QuestionType } from '@/api/playground';
+import type { Question } from '@/api/playground';
+import { QUESTION_TYPE_LABEL_MAP, type QuestionState } from '@/lib/playground';
 
 const { Paragraph, Text, Title } = Typography;
-
-export interface QuestionState {
-  currentInput: string;
-  attempts: number;
-  isCorrect: boolean | null;
-  showedAnswer: boolean;
-}
 
 interface PlaygroundQuestionCardProps {
   question: Question;
   state: QuestionState | undefined;
   isPlaying: boolean;
-  questionTypeLabelMap: Record<QuestionType, string>;
   onInputChange: (value: string) => void;
   onSubmit: () => void;
   onShowAnswer: () => void;
@@ -31,7 +24,6 @@ export function PlaygroundQuestionCard({
   question,
   state,
   isPlaying,
-  questionTypeLabelMap,
   onInputChange,
   onSubmit,
   onShowAnswer,
@@ -41,7 +33,7 @@ export function PlaygroundQuestionCard({
     <Card className="rounded-[32px] border-0 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
       <div className="mb-4 flex justify-center">
         <Tag className="rounded-full border-0 bg-amber-100 px-4 py-1 text-amber-700">
-          {questionTypeLabelMap[question.type]}
+          {QUESTION_TYPE_LABEL_MAP[question.type]}
         </Tag>
       </div>
 
@@ -56,25 +48,38 @@ export function PlaygroundQuestionCard({
             loading={isPlaying}
             onClick={() => onPlayAudio(question.word_audio_url, question.word)}
           />
-          <Paragraph className="!mb-2 !mt-8 text-lg text-gray-700">听音频，写出你听到的单词</Paragraph>
+          <Paragraph className="!mb-2 !mt-8 text-lg text-gray-700">
+            听音频，写出你听到的单词
+          </Paragraph>
           <Text className="text-gray-400">可以重复播放，慢慢来。</Text>
         </div>
       ) : question.type === 'meaning' ? (
         <div className="py-8 text-center">
-          <Button type="text" icon={<SoundOutlined />} onClick={() => onPlayAudio(question.word_audio_url, question.word)} />
+          <Button
+            type="text"
+            icon={<SoundOutlined />}
+            onClick={() => onPlayAudio(question.word_audio_url, question.word)}
+          />
           <div className="mx-auto mt-4 max-w-xl rounded-[28px] bg-amber-50 p-6">
             <Title level={3} className="!mb-0 !text-amber-900">
               {question.meaning}
             </Title>
           </div>
-          <Paragraph className="!mb-0 !mt-4 text-gray-500">根据中文释义写出英文单词</Paragraph>
+          <Paragraph className="!mb-0 !mt-4 text-gray-500">
+            根据中文释义写出英文单词
+          </Paragraph>
         </div>
       ) : question.type === 'sentence_dictation' ? (
         <div className="py-8 text-center">
           <Button
             type="text"
             icon={<SoundOutlined />}
-            onClick={() => onPlayAudio(question.sentence_audio_url, question.sentence || question.word)}
+            onClick={() =>
+              onPlayAudio(
+                question.sentence_audio_url,
+                question.sentence || question.word,
+              )
+            }
           />
           <div className="mx-auto mt-4 max-w-xl rounded-[28px] bg-orange-50 p-6">
             <div className="text-sm font-semibold uppercase tracking-[0.18em] text-orange-500">
@@ -93,7 +98,12 @@ export function PlaygroundQuestionCard({
           <Button
             type="text"
             icon={<SoundOutlined />}
-            onClick={() => onPlayAudio(question.sentence_audio_url, question.sentence || question.word)}
+            onClick={() =>
+              onPlayAudio(
+                question.sentence_audio_url,
+                question.sentence || question.word,
+              )
+            }
           />
           <div className="mx-auto mt-4 max-w-xl rounded-[28px] bg-slate-50 p-6 text-xl font-medium leading-9 text-gray-800">
             {question.sentence?.split('_____').map((part, index, array) => (
@@ -113,7 +123,9 @@ export function PlaygroundQuestionCard({
             </Paragraph>
           ) : null}
           {question.sentence_translation ? (
-            <Paragraph className="!mb-0 !mt-4 text-gray-500">{question.sentence_translation}</Paragraph>
+            <Paragraph className="!mb-0 !mt-4 text-gray-500">
+              {question.sentence_translation}
+            </Paragraph>
           ) : null}
         </div>
       )}
@@ -141,12 +153,18 @@ export function PlaygroundQuestionCard({
             onChange={(event) => onInputChange(event.target.value)}
             onPressEnter={onSubmit}
             disabled={state?.showedAnswer || state?.isCorrect === true}
-            placeholder={question.type === 'context_cloze' ? '请输入提示词对应的目标词' : '请输入答案'}
+            placeholder={
+              question.type === 'context_cloze'
+                ? '请输入提示词对应的目标词'
+                : '请输入答案'
+            }
             className="h-14 rounded-2xl text-center text-lg"
           />
         )}
 
-        {state?.isCorrect === false && !state.showedAnswer && state.attempts < 3 ? (
+        {state?.isCorrect === false &&
+        !state.showedAnswer &&
+        state.attempts < 3 ? (
           <div className="mt-4 text-center text-red-500">
             还可以再试 {3 - state.attempts} 次，提示：{question.hint}
           </div>
@@ -154,7 +172,10 @@ export function PlaygroundQuestionCard({
 
         {state?.showedAnswer ? (
           <div className="mt-4 text-center text-orange-500">
-            正确答案：{question.type === 'sentence_dictation' ? question.sentence : question.word}
+            正确答案：
+            {question.type === 'sentence_dictation'
+              ? question.sentence
+              : question.word}
           </div>
         ) : null}
 
@@ -171,7 +192,11 @@ export function PlaygroundQuestionCard({
             type="primary"
             icon={<ArrowRightOutlined />}
             className="rounded-xl border-0 bg-gradient-to-r from-amber-500 to-orange-500 px-8"
-            disabled={!state?.currentInput.trim() || state?.showedAnswer || state?.isCorrect === true}
+            disabled={
+              !state?.currentInput.trim() ||
+              state?.showedAnswer ||
+              state?.isCorrect === true
+            }
             onClick={onSubmit}
           >
             提交

@@ -38,6 +38,8 @@ from app.services.article_service import (
     apply_generated_article,
     collect_generation_context,
     derive_difficulty_bias,
+    normalize_generated_article,
+    reconcile_article_record,
 )
 from app.services.mistake_service import infer_mistake_item_type, mistake_service
 from app.services.review_service import review_service
@@ -62,6 +64,9 @@ async def get_today_article(
     article = result.scalar_one_or_none()
     if article is None:
         return TodayArticleResponse(has_article=False, article=None)
+    article = await reconcile_article_record(db, user_id=current_user.id, article=article)
+    await db.commit()
+    await db.refresh(article)
     return TodayArticleResponse(has_article=True, article=ArticleResponse.model_validate(article))
 
 
@@ -82,6 +87,9 @@ async def generate_today_article(
     )
     existing = result.scalar_one_or_none()
     if existing and not force_regenerate:
+        existing = await reconcile_article_record(db, user_id=current_user.id, article=existing)
+        await db.commit()
+        await db.refresh(existing)
         return existing
 
     if not current_user.has_completed_assessment:
@@ -104,6 +112,13 @@ async def generate_today_article(
         existing_after_lock = retry_result.scalar_one_or_none()
 
         if existing_after_lock and not force_regenerate:
+            existing_after_lock = await reconcile_article_record(
+                db,
+                user_id=current_user.id,
+                article=existing_after_lock,
+            )
+            await db.commit()
+            await db.refresh(existing_after_lock)
             return existing_after_lock
 
         if existing_after_lock and force_regenerate and existing_after_lock.is_completed:
@@ -116,13 +131,17 @@ async def generate_today_article(
         learning_goals = current_user.learning_goals or []
         custom_goal = current_user.custom_goal
 
-        recent_titles, recent_topics, completed_lessons, vocabulary_count, known_words = (
-            await collect_generation_context(
-                db,
-                user_id=current_user.id,
-                target_date=target_date,
-                current_article_id=existing_after_lock.id if existing_after_lock else None,
-            )
+        (
+            recent_titles,
+            recent_topics,
+            completed_lessons,
+            vocabulary_count,
+            known_words,
+        ) = await collect_generation_context(
+            db,
+            user_id=current_user.id,
+            target_date=target_date,
+            current_article_id=existing_after_lock.id if existing_after_lock else None,
         )
         difficulty_bias, difficulty_note = await derive_difficulty_bias(
             db,
@@ -145,6 +164,11 @@ async def generate_today_article(
                 feedback_comment=request.feedback_comment if request else None,
                 difficulty_bias=difficulty_bias,
                 difficulty_note=difficulty_note,
+            )
+            generated = await normalize_generated_article(
+                db,
+                user_id=current_user.id,
+                generated=generated,
             )
         except Exception as exc:
             raise HTTPException(
@@ -178,7 +202,9 @@ async def generate_today_article(
                     comment=request.feedback_comment,
                     payload={
                         "target_date": target_date.isoformat(),
-                        "previous_title": existing_after_lock.title if existing_after_lock else None,
+                        "previous_title": existing_after_lock.title
+                        if existing_after_lock
+                        else None,
                         "difficulty_bias": difficulty_bias,
                     },
                 )
@@ -242,13 +268,15 @@ async def get_article_detail(
 ) -> Any:
     """获取文章详情。"""
     result = await db.execute(
-        select(Article)
-        .where(Article.id == article_id)
-        .where(Article.user_id == current_user.id)
+        select(Article).where(Article.id == article_id).where(Article.user_id == current_user.id)
     )
     article = result.scalar_one_or_none()
     if article is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文章不存在")
+
+    article = await reconcile_article_record(db, user_id=current_user.id, article=article)
+    await db.commit()
+    await db.refresh(article)
 
     return JSONResponse(
         content=ArticleResponse.model_validate(article).model_dump(mode="json"),
@@ -264,9 +292,7 @@ async def generate_article_audio(
 ) -> Any:
     """生成文章音频。"""
     result = await db.execute(
-        select(Article)
-        .where(Article.id == article_id)
-        .where(Article.user_id == current_user.id)
+        select(Article).where(Article.id == article_id).where(Article.user_id == current_user.id)
     )
     article = result.scalar_one_or_none()
     if article is None:
@@ -317,9 +343,7 @@ async def update_article_progress(
 ) -> Any:
     """更新文章阅读进度并沉淀练习结果。"""
     result = await db.execute(
-        select(Article)
-        .where(Article.id == article_id)
-        .where(Article.user_id == current_user.id)
+        select(Article).where(Article.id == article_id).where(Article.user_id == current_user.id)
     )
     article = result.scalar_one_or_none()
     if article is None:

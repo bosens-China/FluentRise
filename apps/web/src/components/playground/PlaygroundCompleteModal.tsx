@@ -1,5 +1,11 @@
-import { FireOutlined, ReloadOutlined, TrophyOutlined } from '@ant-design/icons';
+import {
+  FireOutlined,
+  ReloadOutlined,
+  TrophyOutlined,
+} from '@ant-design/icons';
 import { Button, Modal, Typography } from 'antd';
+
+import type { PlaygroundSubmitResult } from '@/lib/playground';
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -7,15 +13,7 @@ interface PlaygroundCompleteModalProps {
   open: boolean;
   durationText: string;
   maxStreak: number;
-  result: {
-    total: number;
-    correct: number;
-    wrong: number;
-    skipped: number;
-    accuracy: number;
-    encouragement_zh: string;
-    encouragement_en: string;
-  } | null;
+  result: PlaygroundSubmitResult | null;
   onRetry: () => void;
   onBackHome: () => void;
 }
@@ -32,20 +30,28 @@ export function PlaygroundCompleteModal({
     <Modal open={open} footer={null} closable={false} centered width={500}>
       {result ? (
         <div className="py-4 text-center">
-          <div className="mb-4 text-6xl">打卡成功</div>
+          <div className="mb-4 text-4xl font-black text-amber-500">
+            训练完成
+          </div>
           <Title level={2} className="!mb-2 !text-gray-800">
-            今天的游乐园完成了
+            今天的游乐园已完成
           </Title>
-          <Paragraph className="!mb-1 text-lg font-medium text-amber-800">{result.encouragement_zh}</Paragraph>
+          <Paragraph className="!mb-1 text-lg font-medium text-amber-800">
+            {result.encouragement_zh}
+          </Paragraph>
           <Text className="text-gray-500">{result.encouragement_en}</Text>
 
           <div className="mt-6 grid grid-cols-2 gap-4">
             <div className="rounded-3xl bg-emerald-50 p-4">
-              <div className="text-3xl font-black text-emerald-600">{result.correct}</div>
+              <div className="text-3xl font-black text-emerald-600">
+                {result.correct}
+              </div>
               <div className="text-sm text-emerald-500">答对</div>
             </div>
             <div className="rounded-3xl bg-amber-50 p-4">
-              <div className="text-3xl font-black text-amber-600">{result.accuracy}%</div>
+              <div className="text-3xl font-black text-amber-600">
+                {result.accuracy}%
+              </div>
               <div className="text-sm text-amber-500">正确率</div>
             </div>
           </div>
@@ -65,7 +71,11 @@ export function PlaygroundCompleteModal({
           </div>
 
           <div className="mt-6 flex justify-center gap-4">
-            <Button icon={<ReloadOutlined />} className="rounded-xl" onClick={onRetry}>
+            <Button
+              icon={<ReloadOutlined />}
+              className="rounded-xl"
+              onClick={onRetry}
+            >
               再来一轮
             </Button>
             <Button

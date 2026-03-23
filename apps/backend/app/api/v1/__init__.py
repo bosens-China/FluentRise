@@ -12,6 +12,7 @@ from app.api.v1 import (
     note,
     playground,
     review,
+    speech,
     study_log,
     system,
     tts,
@@ -33,3 +34,4 @@ api_router.include_router(review.router)
 api_router.include_router(system.router)
 api_router.include_router(playground.router)
 api_router.include_router(tts.router)
+api_router.include_router(speech.router)

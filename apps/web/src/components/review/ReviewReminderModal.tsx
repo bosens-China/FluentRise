@@ -89,7 +89,7 @@ export function ReviewReminderModal({ open, onClose }: ReviewReminderModalProps)
         <div className="flex items-center justify-center gap-2 mb-6 p-3 rounded-xl bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-100">
           <FireOutlined className="text-orange-500 text-lg" />
           <Text className="text-orange-700 font-medium">
-            🔥 连续复习 <span className="font-bold text-orange-800">{stats.streak_days}</span> 天
+            连续复习 <span className="font-bold text-orange-800">{stats.streak_days}</span> 天
           </Text>
           {stats.weekly_completed > 0 && (
             <Text className="text-orange-600/70 text-sm">

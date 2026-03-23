@@ -6,17 +6,13 @@ import { useRequest, useSetState } from 'ahooks';
 import { message } from '@/lib/toast';
 import { useEffect, useCallback } from 'react';
 
+import { sendSmsCode, loginByPhone, logout, type UserInfo } from '@/api/auth';
+import { getCurrentUser, getCachedUserInfo } from '@/api/user';
 import {
-  sendSmsCode,
-  loginByPhone,
-  logout,
-  type UserInfo,
-} from '@/api/auth';
-import {
-  getCurrentUser,
-  getCachedUserInfo,
-} from '@/api/user';
-import { clearTokens, isAuthenticated } from '@/utils/request';
+  clearTokens,
+  isAuthenticated,
+  setStoredUserInfo,
+} from '@/lib/auth-storage';
 
 interface AuthState {
   user: UserInfo | null;
@@ -110,8 +106,7 @@ export function useCurrentUser() {
     manual: true,
     onSuccess: (data) => {
       setState({ user: data, isLoading: false });
-      // 更新缓存
-      localStorage.setItem('user_info', JSON.stringify(data));
+      setStoredUserInfo(data);
     },
     onError: () => {
       // 使用缓存数据
@@ -126,7 +121,7 @@ export function useCurrentUser() {
     if (cached) {
       setState({ user: cached, isLoading: false });
     }
-    
+
     // 如果已登录，获取最新数据
     if (isAuthenticated()) {
       run();

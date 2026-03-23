@@ -1,6 +1,7 @@
 /**
  * 用户相关 API
  */
+import { getStoredUserInfo } from '@/lib/auth-storage';
 import { get, post, put } from '@/utils/request';
 
 export interface EnglishLevelInfo {
@@ -91,8 +92,16 @@ export async function getAssessmentData(): Promise<AssessmentDataResponse> {
   return get<AssessmentDataResponse>('/user/assessment/data');
 }
 
-export async function submitAssessment(data: UpdateAssessmentRequest): Promise<UserInfo> {
+export async function submitAssessment(
+  data: UpdateAssessmentRequest,
+): Promise<UserInfo> {
   return post<UserInfo>('/user/assessment', data);
+}
+
+export async function reassess(
+  data: UpdateAssessmentRequest,
+): Promise<UserInfo> {
+  return put<UserInfo>('/user/assessment', data);
 }
 
 export async function getCurrentUser(): Promise<UserInfo> {
@@ -111,20 +120,14 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
   return get<DashboardOverview>('/user/dashboard-overview');
 }
 
-export async function updateProfile(data: UpdateProfileRequest): Promise<UserInfo> {
+export async function updateProfile(
+  data: UpdateProfileRequest,
+): Promise<UserInfo> {
   return put<UserInfo>('/user/profile', data);
 }
 
 export function getCachedUserInfo(): UserInfo | null {
-  const userInfo = localStorage.getItem('user_info');
-  if (!userInfo) {
-    return null;
-  }
-  try {
-    return JSON.parse(userInfo) as UserInfo;
-  } catch {
-    return null;
-  }
+  return getStoredUserInfo<UserInfo>();
 }
 
 export function needsAssessment(): boolean {

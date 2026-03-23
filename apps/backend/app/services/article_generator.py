@@ -9,11 +9,9 @@ from dataclasses import dataclass
 from datetime import date
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-from pydantic import SecretStr
 
-from app.core.config import settings
 from app.schemas.article import ArticleContent
+from app.services.llm_factory import build_chat_model
 
 LEVEL_VOCAB_TARGETS = {
     0: 50,
@@ -77,12 +75,7 @@ class ArticleGenerator:
     """面向零基础与初中级用户的渐进式文章生成器。"""
 
     def __init__(self) -> None:
-        self.llm = ChatOpenAI(
-            model=settings.OPENAI_MODEL,
-            api_key=SecretStr(settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None,
-            base_url=settings.OPENAI_BASE_URL,
-            temperature=0.65,
-        )
+        self.llm = build_chat_model(temperature=0.65)
         self.structured_llm = self.llm.with_structured_output(
             ArticleContent,
             method="function_calling",
@@ -145,7 +138,9 @@ class ArticleGenerator:
         return LessonBudget(
             level=base.level,
             stage_name=stage_name,
-            article_form="micro_story" if base.article_form == "short_dialogue" else base.article_form,
+            article_form="micro_story"
+            if base.article_form == "short_dialogue"
+            else base.article_form,
             paragraphs=base.paragraphs + 1,
             min_sentences=base.min_sentences,
             max_sentences=min(base.max_sentences + 1, 3),
@@ -192,7 +187,8 @@ class ArticleGenerator:
                 level=budget.level,
                 stage_name=budget.stage_name,
                 article_form=budget.article_form,
-                paragraphs=budget.paragraphs + (1 if budget.article_form != "short_dialogue" else 0),
+                paragraphs=budget.paragraphs
+                + (1 if budget.article_form != "short_dialogue" else 0),
                 min_sentences=budget.min_sentences,
                 max_sentences=min(3, budget.max_sentences + 1),
                 min_words_per_sentence=budget.min_words_per_sentence,
@@ -275,7 +271,9 @@ class ArticleGenerator:
         if feedback_comment:
             feedback_text = f"{feedback_text}; 补充：{feedback_comment}"
 
-        difficulty_text = DIFFICULTY_BIAS_HINTS.get(budget.difficulty_bias, DIFFICULTY_BIAS_HINTS["steady"])
+        difficulty_text = DIFFICULTY_BIAS_HINTS.get(
+            budget.difficulty_bias, DIFFICULTY_BIAS_HINTS["steady"]
+        )
         if difficulty_note:
             difficulty_text = f"{difficulty_text} 参考依据：{difficulty_note}"
 
@@ -290,7 +288,7 @@ class ArticleGenerator:
                     "优先复现旧词与高频句型，新词数量必须克制。"
                     "tips 的第一项标题必须是“导读”，内容用中文写成 2 到 3 句。"
                     "如果为对话，speaker 字段必须填写。"
-                    "source_book 和 source_lesson 都保持 null。"
+                    "source_book 和 source_lesson 都保持 null。",
                 ),
                 (
                     "user",
@@ -314,12 +312,12 @@ class ArticleGenerator:
                     f"- 难度保护策略: {difficulty_text}\n"
                     "要求：\n"
                     "1. level 0-1 优先使用极短句、对话和高频表达。\n"
-                    "2. vocabulary 里的每个单词必须出现在正文里。\n"
-                    "3. grammar 只讲最关键的 1-2 个点，并用中文解释。\n"
+                    "2. vocabulary 里的每个单词必须以正文里实际出现的词形返回，不能写原形或词典形；每个词都尽量补全 UK/US 音标。\n"
+                    "3. grammar 只讲最关键的 1-2 个点，并用中文解释；examples 必须直接引用正文原句，不能另造例句。\n"
                     "4. exercises 以选择题和填空题为主。\n"
                     "5. 如果反馈是太难，只能轻微降难；如果太简单，只能轻微升难，不能跨级。\n"
                     "6. 标题自然现代，避免与最近标题重复。\n"
-                    "7. 不要出现付费、会员、模型、系统设定等内容。"
+                    "7. 不要出现付费、会员、模型、系统设定等内容。",
                 ),
             ]
         )
@@ -365,7 +363,11 @@ class ArticleGenerator:
 
         try:
             result = await chain.ainvoke({})
-            article = result if isinstance(result, ArticleContent) else ArticleContent.model_validate(result)
+            article = (
+                result
+                if isinstance(result, ArticleContent)
+                else ArticleContent.model_validate(result)
+            )
         except Exception as exc:
             raise ValueError(f"文章生成失败: {exc}") from exc
 

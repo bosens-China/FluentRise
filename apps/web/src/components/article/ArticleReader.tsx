@@ -1,23 +1,45 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+import { FormOutlined, MessageOutlined } from '@ant-design/icons';
 import { useRequest } from 'ahooks';
-import { FloatButton, Row, Col, message } from 'antd';
-import { FormOutlined } from '@ant-design/icons';
+import { Col, Row, message } from 'antd';
 
 import type { SentenceBreakdownResponse } from '@/api/aiChat';
 import { getSentenceBreakdown } from '@/api/aiChat';
 import type { Article, ExerciseResultItem } from '@/api/article';
 import { generateArticleAudio } from '@/api/article';
-import { NoteEditor } from '@/components/note/NoteEditor';
+import { getNotes, type Note } from '@/api/note';
 
+import { ArticleAIChatDrawer } from './ArticleAIChatDrawer';
+import { ArticleCompletionModal } from './ArticleCompletionModal';
 import { ArticleReaderHeader } from './ArticleReaderHeader';
 import { ArticleReadingPane } from './ArticleReadingPane';
 import { ArticleStudyTabs } from './ArticleStudyTabs';
 import { SentenceBreakdownDrawer } from './SentenceBreakdownDrawer';
-import { EMPTY_EXERCISES, normalizeAnswer, type ExerciseSummary } from './articleReader.shared';
+import {
+  EMPTY_EXERCISES,
+  normalizeAnswer,
+  type ExerciseSummary,
+} from './articleReader.shared';
+
+const NoteEditor = lazy(async () => {
+  const module = await import('@/components/note/NoteEditor');
+  return { default: module.NoteEditor };
+});
 
 interface ArticleReaderProps {
   article: Article;
-  onProgressUpdate?: (progress: number, completed: boolean, exerciseResults?: ExerciseResultItem[]) => void;
+  onProgressUpdate?: (
+    progress: number,
+    completed: boolean,
+    exerciseResults?: ExerciseResultItem[],
+  ) => void;
   isReviewMode?: boolean;
   defaultShowChinese?: boolean;
   onExerciseUpdate?: (summary: ExerciseSummary) => void;
@@ -37,18 +59,28 @@ export function ArticleReader({
   onExerciseUpdate,
   onComplete,
 }: ArticleReaderProps) {
-  const [activeTab, setActiveTab] = useState('vocabulary');
+  const [activeTab, setActiveTab] = useState('tips');
   const [showChinese, setShowChinese] = useState(defaultShowChinese);
-  const [exerciseAnswers, setExerciseAnswers] = useState<Record<number, string>>({});
+  const [exerciseAnswers, setExerciseAnswers] = useState<
+    Record<number, string>
+  >({});
   const [checkedMap, setCheckedMap] = useState<Record<number, boolean>>({});
   const [readProgress, setReadProgress] = useState(article.is_read || 0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [loadingAudio, setLoadingAudio] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isNoteEditorOpen, setIsNoteEditorOpen] = useState(false);
+  const [isAIChatOpen, setIsAIChatOpen] = useState(false);
+  const [isCompletionOpen, setIsCompletionOpen] = useState(false);
   const [helperOpen, setHelperOpen] = useState(false);
-  const [helperTarget, setHelperTarget] = useState<SentenceHelperTarget | null>(null);
-  const [helperData, setHelperData] = useState<SentenceBreakdownResponse | null>(null);
+  const [helperTarget, setHelperTarget] = useState<SentenceHelperTarget | null>(
+    null,
+  );
+  const [helperData, setHelperData] =
+    useState<SentenceBreakdownResponse | null>(null);
+  const [currentNote, setCurrentNote] = useState<Note | null>(null);
+  const [exerciseSummary, setExerciseSummary] = useState<ExerciseSummary>();
+  const [loadingTTSKey, setLoadingTTSKey] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const singleAudioCache = useRef<Record<string, HTMLAudioElement>>({});
   const exercises = article.exercises ?? EMPTY_EXERCISES;
@@ -59,11 +91,17 @@ export function ArticleReader({
 
   useEffect(() => {
     setReadProgress(article.is_read || 0);
+    setActiveTab('tips');
     setExerciseAnswers({});
     setCheckedMap({});
+    setExerciseSummary(undefined);
     setHelperOpen(false);
     setHelperTarget(null);
     setHelperData(null);
+    setCurrentNote(null);
+    setIsAIChatOpen(false);
+    setIsCompletionOpen(false);
+    setLoadingTTSKey(null);
   }, [article.id, article.is_read]);
 
   useEffect(() => {
@@ -82,6 +120,24 @@ export function ArticleReader({
     },
   });
 
+  const articleNoteRequest = useRequest(
+    async () => {
+      const response = await getNotes({
+        page: 1,
+        page_size: 1,
+        article_id: article.id,
+      });
+      return response.items[0] ?? null;
+    },
+    {
+      manual: true,
+      onSuccess: (data) => setCurrentNote(data),
+      onError: () => {
+        message.error('读取笔记失败，请稍后再试');
+      },
+    },
+  );
+
   const buildExerciseResults = useCallback((): ExerciseResultItem[] => {
     return exercises.map((exercise, index) => {
       const expectedAnswer = exercise.answer || '';
@@ -90,7 +146,8 @@ export function ArticleReader({
         question: exercise.question,
         expected_answer: expectedAnswer,
         user_answer: userAnswer,
-        is_correct: normalizeAnswer(userAnswer) === normalizeAnswer(expectedAnswer),
+        is_correct:
+          normalizeAnswer(userAnswer) === normalizeAnswer(expectedAnswer),
       };
     });
   }, [exerciseAnswers, exercises]);
@@ -99,35 +156,49 @@ export function ArticleReader({
     if (!onExerciseUpdate || exercises.length === 0) {
       return;
     }
+
     const checkedIndexes = Object.keys(checkedMap);
     if (checkedIndexes.length === 0) {
       return;
     }
 
     const results = buildExerciseResults();
-    onExerciseUpdate({
+    const summary = {
       correct: results.filter((item) => item.is_correct).length,
       total: exercises.length,
       results,
-    });
-  }, [buildExerciseResults, checkedMap, exercises, onExerciseUpdate]);
+    };
+    setExerciseSummary(summary);
+    onExerciseUpdate(summary);
+  }, [buildExerciseResults, checkedMap, exercises.length, onExerciseUpdate]);
 
-  const playSingleTTS = useCallback((text: string) => {
-    if (singleAudioCache.current[text]) {
-      const cachedAudio = singleAudioCache.current[text];
+  const playSingleTTS = useCallback(async (text: string) => {
+    const cachedAudio = singleAudioCache.current[text];
+    setLoadingTTSKey(text);
+
+    if (cachedAudio) {
       cachedAudio.currentTime = 0;
-      void cachedAudio.play().catch(() => {
+      try {
+        await cachedAudio.play();
+      } catch {
         message.error('音频播放失败');
-      });
+      } finally {
+        setLoadingTTSKey((current) => (current === text ? null : current));
+      }
       return;
     }
 
     const url = `/api/v1/tts/audio?word=${encodeURIComponent(text)}`;
     const audio = new Audio(url);
     singleAudioCache.current[text] = audio;
-    void audio.play().catch(() => {
+
+    try {
+      await audio.play();
+    } catch {
       message.error('音频播放失败');
-    });
+    } finally {
+      setLoadingTTSKey((current) => (current === text ? null : current));
+    }
   }, []);
 
   const toggleAudio = async () => {
@@ -173,7 +244,10 @@ export function ArticleReader({
   };
 
   const handleAnswerSelect = (exerciseIndex: number, answer: string) => {
-    setExerciseAnswers((previous) => ({ ...previous, [exerciseIndex]: answer }));
+    setExerciseAnswers((previous) => ({
+      ...previous,
+      [exerciseIndex]: answer,
+    }));
   };
 
   const checkAnswer = (exerciseIndex: number) => {
@@ -183,15 +257,27 @@ export function ArticleReader({
     const currentResults = buildExerciseResults();
     const finishedCount = Object.keys(nextCheckedMap).length;
     const nextProgress =
-      finishedCount === exercises.length && exercises.length > 0 ? 100 : Math.max(readProgress, 70);
+      finishedCount === exercises.length && exercises.length > 0
+        ? Math.max(readProgress, 80)
+        : Math.max(readProgress, 70);
+
     setReadProgress(nextProgress);
-    onProgressUpdate?.(nextProgress, nextProgress >= 100 && !isReviewMode, currentResults);
+    onProgressUpdate?.(nextProgress, false, currentResults);
   };
 
   const handleMarkComplete = () => {
-    const results = buildExerciseResults();
+    setIsCompletionOpen(true);
+  };
+
+  const handleCompleteCourse = (results: ExerciseResultItem[]) => {
     setReadProgress(100);
+    setIsCompletionOpen(false);
     onProgressUpdate?.(100, true, results);
+  };
+
+  const handleOpenNoteEditor = () => {
+    setIsNoteEditorOpen(true);
+    void articleNoteRequest.run();
   };
 
   return (
@@ -212,9 +298,10 @@ export function ArticleReader({
           loadingAudio={loadingAudio}
           isPlaying={isPlaying}
           showChinese={showChinese}
+          loadingTTSKey={loadingTTSKey}
           onToggleAudio={() => void toggleAudio()}
           onToggleChinese={() => setShowChinese((value) => !value)}
-          onPlaySingleTTS={playSingleTTS}
+          onPlaySingleTTS={(text) => void playSingleTTS(text)}
           onOpenSentenceHelper={openSentenceHelper}
           onAudioEnded={() => setIsPlaying(false)}
           onAudioPause={() => setIsPlaying(false)}
@@ -226,25 +313,33 @@ export function ArticleReader({
             <ArticleStudyTabs
               article={article}
               activeTab={activeTab}
-              exerciseAnswers={exerciseAnswers}
-              checkedMap={checkedMap}
+              loadingTTSKey={loadingTTSKey}
               onTabChange={setActiveTab}
-              onAnswerSelect={handleAnswerSelect}
-              onCheckAnswer={checkAnswer}
-              onPlaySingleTTS={playSingleTTS}
+              onPlaySingleTTS={(text) => void playSingleTTS(text)}
             />
           </div>
         </Col>
       </Row>
 
-      <FloatButton
-        icon={<FormOutlined />}
-        type="primary"
-        tooltip="记笔记"
-        onClick={() => setIsNoteEditorOpen(true)}
-        style={{ right: 48, bottom: 48, width: 56, height: 56 }}
-        className="shadow-lg"
-      />
+      <div className="fixed bottom-6 right-4 z-30 flex flex-col items-end gap-3 md:bottom-8 md:right-8">
+        <button
+          type="button"
+          aria-label="打开 AI 课文对话"
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-[linear-gradient(135deg,_#ffb347,_#ff8a00)] text-white shadow-[0_18px_36px_rgba(255,138,0,0.28)] transition-transform duration-200 hover:-translate-y-0.5"
+          onClick={() => setIsAIChatOpen(true)}
+        >
+          <MessageOutlined className="text-lg" />
+        </button>
+
+        <button
+          type="button"
+          aria-label="打开课文笔记"
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-[linear-gradient(135deg,_#58CC02,_#3ba700)] text-white shadow-[0_18px_36px_rgba(88,204,2,0.24)] transition-transform duration-200 hover:-translate-y-0.5"
+          onClick={handleOpenNoteEditor}
+        >
+          <FormOutlined className="text-lg" />
+        </button>
+      </div>
 
       <SentenceBreakdownDrawer
         open={helperOpen}
@@ -254,7 +349,35 @@ export function ArticleReader({
         onClose={() => setHelperOpen(false)}
       />
 
-      <NoteEditor open={isNoteEditorOpen} onClose={() => setIsNoteEditorOpen(false)} articleId={article.id} />
+      <ArticleAIChatDrawer
+        article={article}
+        open={isAIChatOpen}
+        onClose={() => setIsAIChatOpen(false)}
+      />
+
+      <ArticleCompletionModal
+        open={isCompletionOpen}
+        article={article}
+        exerciseSummary={exerciseSummary}
+        exerciseAnswers={exerciseAnswers}
+        checkedMap={checkedMap}
+        onClose={() => setIsCompletionOpen(false)}
+        onAnswerSelect={handleAnswerSelect}
+        onCheckAnswer={checkAnswer}
+        onComplete={handleCompleteCourse}
+      />
+
+      {isNoteEditorOpen ? (
+        <Suspense fallback={null}>
+          <NoteEditor
+            open={isNoteEditorOpen}
+            onClose={() => setIsNoteEditorOpen(false)}
+            onSuccess={() => void articleNoteRequest.run()}
+            initialNote={currentNote}
+            articleId={article.id}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

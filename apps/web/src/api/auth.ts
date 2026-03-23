@@ -1,8 +1,14 @@
 /**
- * 认证相关 API
+ * 认证相关 API。
  */
-import { post, setTokens, clearTokens } from '@/utils/request';
 import type { UserInfo } from '@/api/user';
+import {
+  clearTokens,
+  getRefreshToken,
+  setStoredUserInfo,
+  setTokens,
+} from '@/lib/auth-storage';
+import { post } from '@/utils/request';
 
 export interface SendSmsCodeRequest {
   phone: string;
@@ -34,42 +40,43 @@ export interface RefreshTokenRequest {
   refresh_token: string;
 }
 
+export interface LogoutRequest {
+  refresh_token?: string;
+}
+
 export interface MessageResponse {
   message: string;
 }
 
-// 重新导出 UserInfo 类型
 export type { UserInfo };
 
-/**
- * 发送短信验证码
- */
-export async function sendSmsCode(data: SendSmsCodeRequest): Promise<SendSmsCodeResponse> {
+export async function sendSmsCode(
+  data: SendSmsCodeRequest,
+): Promise<SendSmsCodeResponse> {
   return post<SendSmsCodeResponse>('/auth/sms/send', data);
 }
 
-/**
- * 手机号验证码登录
- */
-export async function loginByPhone(data: PhoneLoginRequest): Promise<LoginResponse> {
+export async function loginByPhone(
+  data: PhoneLoginRequest,
+): Promise<LoginResponse> {
   const response = await post<LoginResponse>('/auth/login/phone', data);
 
-  // 保存令牌
   if (response.tokens) {
     setTokens(response.tokens.access_token, response.tokens.refresh_token);
-    // 保存用户信息
-    localStorage.setItem('user_info', JSON.stringify(response.user));
+    setStoredUserInfo(response.user);
   }
 
   return response;
 }
 
-/**
- * 退出登录
- */
 export async function logout(): Promise<MessageResponse> {
+  const refreshToken = getRefreshToken();
+  const payload: LogoutRequest = refreshToken
+    ? { refresh_token: refreshToken }
+    : {};
+
   try {
-    const response = await post<MessageResponse>('/auth/logout', {});
+    const response = await post<MessageResponse>('/auth/logout', payload);
     clearTokens();
     return response;
   } catch {
