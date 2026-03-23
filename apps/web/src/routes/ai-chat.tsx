@@ -1,11 +1,20 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, redirect, useSearch } from '@tanstack/react-router';
-import { useRequest } from 'ahooks';
-import { App, Button, Card, Empty, Input, Segmented, Space, Typography } from 'antd';
+import {
+  App,
+  Button,
+  Card,
+  Empty,
+  Input,
+  Segmented,
+  Space,
+  Typography,
+} from 'antd';
 
-import { sendAIChatMessage } from '@/api/aiChat';
+import { streamAIChatMessage } from '@/api/aiChat';
 import { getArticleDetail, getTodayArticle } from '@/api/article';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { useQuery } from '@/hooks/useData';
 import { isAuthenticated } from '@/utils/request';
 
 const { Paragraph, Text, Title } = Typography;
@@ -28,7 +37,10 @@ export const Route = createFileRoute('/ai-chat')({
 });
 
 function AIChatPage() {
-  const search = useSearch({ from: '/ai-chat' }) as { articleId?: number; mode?: ChatMode };
+  const search = useSearch({ from: '/ai-chat' }) as {
+    articleId?: number;
+    mode?: ChatMode;
+  };
   const { message } = App.useApp();
   const [mode, setMode] = useState<ChatMode>(search.mode || 'general');
   const [input, setInput] = useState('');
@@ -39,8 +51,11 @@ function AIChatPage() {
       content: '你可以问我课文里的表达，也可以直接把不会说的中文发给我。',
     },
   ]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const todayArticleRequest = useRequest(getTodayArticle);
+  const todayArticleRequest = useQuery(getTodayArticle);
 
   const lessonArticleId = useMemo(() => {
     if (typeof search.articleId === 'number') {
@@ -49,7 +64,7 @@ function AIChatPage() {
     return todayArticleRequest.data?.article?.id;
   }, [search.articleId, todayArticleRequest.data?.article?.id]);
 
-  const articleDetailRequest = useRequest(
+  const articleDetailRequest = useQuery(
     async () => {
       if (!lessonArticleId) {
         return null;
@@ -61,33 +76,25 @@ function AIChatPage() {
     },
   );
 
-  const sendRequest = useRequest(
-    async (content: string) => {
-      return sendAIChatMessage({
-        mode,
-        message: content,
-        article_id: mode === 'lesson' ? lessonArticleId : undefined,
-      });
-    },
-    {
-      manual: true,
-      onSuccess: (data, [content]) => {
-        setMessages((previous) => [
-          ...previous,
-          { id: `user-${Date.now()}`, role: 'user', content },
-          { id: `assistant-${Date.now()}`, role: 'assistant', content: data.reply },
-        ]);
-        setInput('');
-      },
-      onError: () => {
-        message.error(mode === 'lesson' ? '课文对话发送失败' : 'AI 求助发送失败');
-      },
-    },
-  );
+  useEffect(() => {
+    window.requestAnimationFrame(() => {
+      const container = scrollContainerRef.current;
+      if (!container) {
+        return;
+      }
+      container.scrollTop = container.scrollHeight;
+    });
+  }, [messages, isStreaming]);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   const handleSend = async () => {
     const trimmed = input.trim();
-    if (!trimmed) {
+    if (!trimmed || isStreaming) {
       return;
     }
     if (mode === 'lesson' && !lessonArticleId) {
@@ -95,14 +102,57 @@ function AIChatPage() {
       return;
     }
 
-    const optimisticUserMessage: ChatMessage = {
-      id: `draft-${Date.now()}`,
-      role: 'user',
-      content: trimmed,
-    };
-    setMessages((previous) => [...previous, optimisticUserMessage]);
-    await sendRequest.runAsync(trimmed);
-    setMessages((previous) => previous.filter((item) => item.id !== optimisticUserMessage.id));
+    const userMessageId = `user-${Date.now()}`;
+    const assistantMessageId = `assistant-${Date.now()}`;
+
+    setMessages((previous) => [
+      ...previous,
+      { id: userMessageId, role: 'user', content: trimmed },
+      { id: assistantMessageId, role: 'assistant', content: '' },
+    ]);
+    setInput('');
+    setIsStreaming(true);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      await streamAIChatMessage(
+        {
+          mode,
+          message: trimmed,
+          article_id: mode === 'lesson' ? lessonArticleId : undefined,
+        },
+        {
+          signal: controller.signal,
+          onChunk: (_chunk, accumulated) => {
+            setMessages((previous) =>
+              previous.map((item) =>
+                item.id === assistantMessageId
+                  ? { ...item, content: accumulated }
+                  : item,
+              ),
+            );
+          },
+        },
+      );
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        return;
+      }
+      setMessages((previous) =>
+        previous.filter((item) => item.id !== assistantMessageId),
+      );
+      message.error(
+        (error as Error).message ||
+          (mode === 'lesson' ? '课文对话发送失败' : 'AI 求助发送失败'),
+      );
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      setIsStreaming(false);
+    }
   };
 
   return (
@@ -120,7 +170,7 @@ function AIChatPage() {
         <Segmented<ChatMode>
           block
           value={mode}
-          onChange={setMode}
+          onChange={(nextValue) => setMode(nextValue)}
           options={[
             { label: '课文对话', value: 'lesson' },
             { label: '通用求助', value: 'general' },
@@ -131,7 +181,9 @@ function AIChatPage() {
           <div className="mt-5 rounded-3xl bg-amber-50 p-5">
             {articleDetailRequest.data ? (
               <>
-                <div className="mb-2 text-sm font-bold uppercase tracking-[0.16em] text-amber-500">当前课文</div>
+                <div className="mb-2 text-sm font-bold uppercase tracking-[0.16em] text-amber-500">
+                  当前课文
+                </div>
                 <Title level={4} className="!mb-2 !text-gray-800">
                   {articleDetailRequest.data.title}
                 </Title>
@@ -140,14 +192,20 @@ function AIChatPage() {
                 </Paragraph>
               </>
             ) : (
-              <Empty description="还没有可用的课文上下文" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              <Empty
+                description="还没有可用的课文上下文"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
             )}
           </div>
         ) : null}
       </Card>
 
       <Card className="rounded-[32px] border-0 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
-        <div className="mb-6 max-h-[520px] space-y-4 overflow-y-auto pr-2">
+        <div
+          ref={scrollContainerRef}
+          className="mb-6 max-h-[520px] space-y-4 overflow-y-auto pr-2"
+        >
           {messages.map((item) => (
             <div
               key={item.id}
@@ -160,8 +218,15 @@ function AIChatPage() {
               <div className="mb-1 text-xs font-bold uppercase tracking-[0.16em] opacity-70">
                 {item.role === 'assistant' ? 'AI' : '我'}
               </div>
-              <Paragraph className={`!mb-0 whitespace-pre-wrap ${item.role === 'assistant' ? 'text-gray-700' : 'text-white'}`}>
-                {item.content}
+              <Paragraph
+                className={`!mb-0 whitespace-pre-wrap ${
+                  item.role === 'assistant' ? 'text-gray-700' : 'text-white'
+                }`}
+              >
+                {item.content ||
+                  (isStreaming && item.role === 'assistant'
+                    ? '正在组织答案...'
+                    : '')}
               </Paragraph>
             </div>
           ))}
@@ -178,17 +243,27 @@ function AIChatPage() {
                 void handleSend();
               }
             }}
-            placeholder={mode === 'lesson' ? '问课文里的句子、单词、表达都可以' : '把你不会表达的中文或英文发给我'}
+            placeholder={
+              mode === 'lesson'
+                ? '问课文里的句子、单词、表达都可以'
+                : '把你不会表达的中文或英文发给我'
+            }
           />
           <Button
             type="primary"
-            loading={sendRequest.loading}
+            loading={isStreaming}
             className="h-auto border-0 bg-gradient-to-r from-amber-500 to-orange-500 px-8"
             onClick={() => void handleSend()}
           >
             发送
           </Button>
         </Space.Compact>
+
+        {isStreaming ? (
+          <Text className="mt-3 block text-xs text-gray-400">
+            AI 正在流式输出...
+          </Text>
+        ) : null}
       </Card>
     </DashboardLayout>
   );

@@ -1,11 +1,13 @@
 """
-AI 对话服务
+AI 对话服务。
 """
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any
 
+from langchain_core.messages import AIMessageChunk
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.core.config import settings
@@ -19,27 +21,24 @@ class AIChatService:
         self.enabled = bool(settings.OPENAI_API_KEY)
         self.llm = build_chat_model(temperature=0.5)
 
-    async def reply(
+    def _build_prompt(
         self,
         *,
         mode: str,
         message: str,
         user_level: int | None,
         learning_goals: list[str] | None,
-        article_context: dict[str, Any] | None = None,
-    ) -> str:
-        """生成对话回复。"""
-        if not self.enabled:
-            return self._fallback(mode, article_context)
-
+        article_context: dict[str, Any] | None,
+    ) -> ChatPromptTemplate:
         goal_text = "、".join(learning_goals or []) or "日常交流"
-        prompt = ChatPromptTemplate.from_messages(
+        return ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     "你是中文用户的英语学习助手。默认使用中文回答，必要时给出简短自然的英文示例。"
                     "如果是 lesson 模式，必须围绕课文场景、新词和核心句型来回答，不要发散。"
-                    "如果是 general 模式，可以解释表达、翻译句子、纠正语法，但保持简洁、友好、易懂。",
+                    "如果是 general 模式，可以解释表达、翻译句子、纠正语法，但保持简洁、友好、易懂。"
+                    "优先短段落输出，让前端可以稳定流式展示。",
                 ),
                 (
                     "user",
@@ -59,6 +58,51 @@ class AIChatService:
             message=message,
         )
 
+    @staticmethod
+    def _extract_chunk_text(chunk: object) -> str:
+        if isinstance(chunk, AIMessageChunk):
+            content = chunk.content
+        else:
+            content = getattr(chunk, "content", "")
+
+        if isinstance(content, str):
+            return content
+
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                    continue
+                if isinstance(item, dict):
+                    text = item.get("text")
+                    if isinstance(text, str):
+                        parts.append(text)
+            return "".join(parts)
+
+        return ""
+
+    async def reply(
+        self,
+        *,
+        mode: str,
+        message: str,
+        user_level: int | None,
+        learning_goals: list[str] | None,
+        article_context: dict[str, Any] | None = None,
+    ) -> str:
+        """生成完整对话回复。"""
+        if not self.enabled:
+            return self._fallback(mode, article_context)
+
+        prompt = self._build_prompt(
+            mode=mode,
+            message=message,
+            user_level=user_level,
+            learning_goals=learning_goals,
+            article_context=article_context,
+        )
+
         try:
             chain = prompt | self.llm
             response = await chain.ainvoke({})
@@ -70,12 +114,53 @@ class AIChatService:
 
         return self._fallback(mode, article_context)
 
+    async def stream_reply(
+        self,
+        *,
+        mode: str,
+        message: str,
+        user_level: int | None,
+        learning_goals: list[str] | None,
+        article_context: dict[str, Any] | None = None,
+    ) -> AsyncIterator[str]:
+        """流式生成对话回复。"""
+        if not self.enabled:
+            yield self._fallback(mode, article_context)
+            return
+
+        prompt = self._build_prompt(
+            mode=mode,
+            message=message,
+            user_level=user_level,
+            learning_goals=learning_goals,
+            article_context=article_context,
+        )
+
+        try:
+            chain = prompt | self.llm
+            has_output = False
+            async for chunk in chain.astream({}):
+                text = self._extract_chunk_text(chunk)
+                if not text:
+                    continue
+                has_output = True
+                yield text
+
+            if has_output:
+                return
+        except Exception:
+            pass
+
+        yield self._fallback(mode, article_context)
+
     @staticmethod
     def _fallback(mode: str, article_context: dict[str, Any] | None) -> str:
         """模型不可用时的兜底回复。"""
         if mode == "lesson" and article_context:
             title = article_context.get("title", "今天这节课")
-            return f"我们可以围绕《{title}》继续练习。你先试着用一句简单英文复述内容，我来帮你润色。"
+            return (
+                f"我们可以围绕《{title}》继续练习。你先试着用一句简单英文复述内容，我来帮你润色。"
+            )
         return "你可以直接把想表达的中文或英文发给我，我会尽量用简单清楚的方式帮你整理。"
 
 

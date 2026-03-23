@@ -41,6 +41,25 @@ export interface ExerciseResultItem {
   is_correct: boolean;
 }
 
+export interface ArticleAudioWordTiming {
+  text: string;
+  start_ms: number;
+  end_ms: number;
+}
+
+export interface ArticleAudioSegmentTiming {
+  paragraph_index: number;
+  speaker?: string;
+  text: string;
+  start_ms: number;
+  end_ms: number;
+  words: ArticleAudioWordTiming[];
+}
+
+export interface ArticleAudioTimelineResponse {
+  segments: ArticleAudioSegmentTiming[];
+}
+
 export interface Article {
   id: number;
   title: string;
@@ -88,7 +107,9 @@ export async function getTodayArticle(): Promise<TodayArticleResponse> {
   return request.get('/articles/today');
 }
 
-export async function generateTodayArticle(params: GenerateArticleParams = {}): Promise<Article> {
+export async function generateTodayArticle(
+  params: GenerateArticleParams = {},
+): Promise<Article> {
   return request.post(
     '/articles/today/generate',
     {
@@ -103,7 +124,10 @@ export async function generateTodayArticle(params: GenerateArticleParams = {}): 
   );
 }
 
-export async function getArticleHistory(page = 1, pageSize = 10): Promise<ArticleListResponse> {
+export async function getArticleHistory(
+  page = 1,
+  pageSize = 10,
+): Promise<ArticleListResponse> {
   return request.get('/articles/history', {
     params: { page, page_size: pageSize },
   });
@@ -135,4 +159,10 @@ export async function generateArticleAudio(articleId: number): Promise<string> {
     },
   );
   return URL.createObjectURL(response as unknown as Blob);
+}
+
+export async function getArticleAudioTimeline(
+  articleId: number,
+): Promise<ArticleAudioTimelineResponse> {
+  return request.get(`/articles/${articleId}/audio-timeline`);
 }

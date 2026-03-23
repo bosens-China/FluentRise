@@ -2,6 +2,8 @@
 FluentRise 后端主应用入口。
 """
 
+from __future__ import annotations
+
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -15,23 +17,47 @@ from app.db.database import close_db_connection, init_db
 from app.db.redis import close_redis, get_redis, init_redis
 
 
+class ConsoleStyle:
+    """控制台颜色样式。"""
+
+    reset = "\033[0m"
+    bold = "\033[1m"
+    cyan = "\033[96m"
+    green = "\033[92m"
+    yellow = "\033[93m"
+    magenta = "\033[95m"
+
+
+def console_banner(label: str, message: str, color: str) -> None:
+    """打印带颜色的启动日志。"""
+    print(f"{ConsoleStyle.bold}{color}{label}{ConsoleStyle.reset} {message}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     应用生命周期管理。
+
     启动时初始化 Redis、限流器和数据库，关闭时回收资源。
     """
-    print("[START] 正在初始化应用...")
+    console_banner("[START]", "正在初始化应用...", ConsoleStyle.cyan)
     await init_redis()
+    console_banner("[REDIS]", "Redis 已连接", ConsoleStyle.magenta)
+
     await init_rate_limiters(await get_redis())
+    console_banner("[LIMIT]", "限流器初始化完成", ConsoleStyle.yellow)
+
     await init_db()
-    print(f"[OK] {settings.APP_NAME} 启动成功！")
-    print("[INFO] API 文档: http://localhost:8000/docs")
+    console_banner("[DB]", "数据库初始化完成", ConsoleStyle.magenta)
+    console_banner("[OK]", f"{settings.APP_NAME} 启动成功", ConsoleStyle.green)
+    console_banner("[DOCS]", "API 文档: http://localhost:8000/docs", ConsoleStyle.cyan)
+
     yield
-    print("[STOP] 正在关闭应用...")
+
+    console_banner("[STOP]", "正在关闭应用...", ConsoleStyle.yellow)
     await close_redis()
     await close_db_connection()
-    print("[OK] 应用已安全关闭")
+    console_banner("[OK]", "应用已安全关闭", ConsoleStyle.green)
 
 
 app = FastAPI(

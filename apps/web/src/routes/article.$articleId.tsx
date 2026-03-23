@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   createFileRoute,
   useNavigate,
@@ -270,6 +270,17 @@ function ArticlePage() {
     return { defaultShowChinese: true, quickMode: false };
   }, [previewAssessment]);
 
+  const handleExerciseUpdate = useCallback(
+    (summary: {
+      correct: number;
+      total: number;
+      results: ExerciseResultItem[];
+    }) => {
+      setExerciseSummary(summary);
+    },
+    [],
+  );
+
   if (articleRequest.loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.14),_transparent_28%),linear-gradient(180deg,_#fffdf9,_#fff9f1)]">
@@ -342,9 +353,7 @@ function ArticlePage() {
           onProgressUpdate={(progress, completed, results) => {
             void updateProgressRequest.run(progress, completed, results);
           }}
-          onExerciseUpdate={(summary) => {
-            setExerciseSummary(summary);
-          }}
+          onExerciseUpdate={handleExerciseUpdate}
           onComplete={() => {
             setReviewEndTime(Date.now());
             setShowCompleteModal(true);

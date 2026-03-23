@@ -1,5 +1,5 @@
 """
-渐进式文章生成服务
+渐进式文章生成服务。
 """
 
 from __future__ import annotations
@@ -35,9 +35,24 @@ GOAL_SCENE_HINTS = {
 
 DIFFICULTY_BIAS_HINTS = {
     "steady": "保持当前等级内的稳定难度。",
-    "ease_down": "同级内轻微降难，优先更短句、更少新词、更强复现。",
+    "ease_down": "同级内轻微降难，优先更短句、更少新词、更多重复。",
     "ease_up": "同级内轻微升难，但绝对不能跨级。",
 }
+
+SUPPORTED_SPEAKERS = [
+    "Tom",
+    "Mom",
+    "Dad",
+    "Amy",
+    "Emma",
+    "Jack",
+    "Lily",
+    "Mr. Lee",
+    "Ms. Anna",
+    "Teacher",
+    "Student",
+    "Narrator",
+]
 
 
 @dataclass(frozen=True)
@@ -72,7 +87,7 @@ BASE_LEVEL_BUDGETS: dict[int, LessonBudget] = {
 
 
 class ArticleGenerator:
-    """面向零基础与初中级用户的渐进式文章生成器。"""
+    """面向零基础与初中级用户的渐进式课文生成器。"""
 
     def __init__(self) -> None:
         self.llm = build_chat_model(temperature=0.65)
@@ -235,7 +250,7 @@ class ArticleGenerator:
 
     @staticmethod
     def _pick_scene(learning_goals: list[str], custom_goal: str | None) -> str:
-        """优先使用自定义目标，否则从学习目标里选场景。"""
+        """优先使用自定义目标，否则从学习目标中选场景。"""
         if custom_goal:
             return custom_goal
 
@@ -266,6 +281,7 @@ class ArticleGenerator:
         recent_titles_str = " | ".join(recent_titles[:8]) if recent_titles else "无"
         recent_topics_str = " | ".join(recent_topics[:6]) if recent_topics else "无"
         learning_goal_text = "、".join(learning_goals) if learning_goals else "daily"
+        supported_speakers = ", ".join(SUPPORTED_SPEAKERS)
 
         feedback_text = feedback_reason or "无"
         if feedback_comment:
@@ -287,7 +303,10 @@ class ArticleGenerator:
                     "不要跨级，不要为了有趣而牺牲可读性。"
                     "优先复现旧词与高频句型，新词数量必须克制。"
                     "tips 的第一项标题必须是“导读”，内容用中文写成 2 到 3 句。"
-                    "如果为对话，speaker 字段必须填写。"
+                    "如果是对话，speaker 字段必须填写。"
+                    "如果使用人物名，请优先从以下名称中选择，以便 TTS 能稳定匹配合适声线："
+                    f"{supported_speakers}。"
+                    "避免创造不在名单中的新人物名；如果不是对话，可使用 Narrator。"
                     "source_book 和 source_lesson 都保持 null。",
                 ),
                 (
@@ -317,7 +336,10 @@ class ArticleGenerator:
                     "4. exercises 以选择题和填空题为主。\n"
                     "5. 如果反馈是太难，只能轻微降难；如果太简单，只能轻微升难，不能跨级。\n"
                     "6. 标题自然现代，避免与最近标题重复。\n"
-                    "7. 不要出现付费、会员、模型、系统设定等内容。",
+                    "7. 不要出现付费、会员、模型、系统设定等内容。\n"
+                    f"8. 对话人物优先使用这些 speaker 名称：{supported_speakers}；同一篇内保持前后一致。\n"
+                    "9. 如果是家庭对话，优先使用 Tom / Mom / Dad；如果是校园场景，优先使用 Teacher / Student 或 Mr. Lee / Ms. Anna。\n"
+                    "10. 导读、语法、生词、练习都要与正文严格对应，不能凭空扩写。",
                 ),
             ]
         )

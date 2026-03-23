@@ -1,10 +1,16 @@
 """
-TTS 语音合成服务
-使用 edge-tts 生成文章音频
+TTS 语音合成服务。
+
+使用 `edge-tts` 生成单词、句子和整篇课文音频，并缓存全文朗读时间轴。
 """
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
+import logging
+import re
 from typing import TYPE_CHECKING
 
 from app.schemas.article import ArticleContent
@@ -18,277 +24,394 @@ except ImportError:
 if TYPE_CHECKING:
     from edge_tts.typing import TTSChunk
 
+logger = logging.getLogger(__name__)
+
+ARTICLE_CACHE_TTL_SECONDS = 30 * 24 * 3600
+ARTICLE_AUDIO_CACHE_VERSION = "v2"
+ARTICLE_SEGMENT_PADDING_MS = 220
+FULL_TEXT_VOICE = "en-US-ChristopherNeural"
+MALE_VOICE = "en-US-EricNeural"
+FEMALE_VOICE = "en-US-JennyNeural"
+TEACHER_VOICE = "en-US-RogerNeural"
+STUDENT_VOICE = "en-US-AnaNeural"
+
 
 class TTSService:
-    """TTS 语音合成服务类"""
+    """TTS 语音合成服务类。"""
 
     def __init__(self) -> None:
-        """初始化声音映射"""
-        # 简单的声音映射
-        self.voices = {
-            "Narrator": "en-US-ChristopherNeural",
-            "Male": "en-US-GuyNeural",
-            "Female": "en-US-JennyNeural",
-            "Alice": "en-US-AriaNeural",
-            "Bob": "en-US-EricNeural",
-            "Teacher": "en-US-RogerNeural",
-            "Student": "en-US-AnaNeural",
+        self.default_voice = FULL_TEXT_VOICE
+        self.named_speaker_voices = {
+            "tom": MALE_VOICE,
+            "jack": MALE_VOICE,
+            "dad": MALE_VOICE,
+            "father": MALE_VOICE,
+            "mr lee": MALE_VOICE,
+            "mr. lee": MALE_VOICE,
+            "mom": FEMALE_VOICE,
+            "mum": FEMALE_VOICE,
+            "mother": FEMALE_VOICE,
+            "amy": FEMALE_VOICE,
+            "emma": FEMALE_VOICE,
+            "lily": FEMALE_VOICE,
+            "ms anna": FEMALE_VOICE,
+            "ms. anna": FEMALE_VOICE,
+            "teacher": TEACHER_VOICE,
+            "student": STUDENT_VOICE,
+            "narrator": FULL_TEXT_VOICE,
         }
-        self.default_voice = "en-US-ChristopherNeural"
+        self.female_markers = {
+            "mrs",
+            "miss",
+            "ms",
+            "mother",
+            "mom",
+            "mum",
+            "girl",
+            "woman",
+            "lady",
+        }
+        self.male_markers = {
+            "mr",
+            "father",
+            "dad",
+            "boy",
+            "man",
+            "sir",
+        }
 
     @staticmethod
     def _is_audio_chunk(chunk: TTSChunk) -> bool:
-        """
-        类型守卫：检查 chunk 是否为音频数据
-
-        使用这种方式可以：
-        1. 明确表达意图
-        2. 让类型检查器理解类型收窄
-        3. 复用逻辑
-        """
         return chunk.get("type") == "audio" and "data" in chunk
 
     @staticmethod
-    def _extract_audio_data(chunk: TTSChunk) -> bytes | None:
-        """
-        安全提取音频数据
+    def _is_word_boundary_chunk(chunk: TTSChunk) -> bool:
+        return chunk.get("type") == "WordBoundary"
 
-        返回 None 表示非音频 chunk 或数据缺失
-        """
+    @staticmethod
+    def _extract_audio_data(chunk: TTSChunk) -> bytes | None:
         if chunk.get("type") != "audio":
             return None
 
         data = chunk.get("data")
         if data is None:
             return None
-
-        # 确保是 bytes 类型
         if isinstance(data, bytes):
             return data
-
-        # 如果 edge-tts 返回其他类型（如 bytearray），转换为 bytes
         return bytes(data) if data else None
 
+    @staticmethod
+    def _to_ms(value: float | int | None) -> int:
+        if value is None:
+            return 0
+        return max(0, int(round(float(value) / 10_000)))
+
+    @staticmethod
+    def _normalize_speaker_name(speaker: str) -> str:
+        normalized = re.sub(r"\s+", " ", speaker.strip().lower())
+        return normalized
+
+    @staticmethod
+    def _normalize_audio_text(text: str) -> str:
+        stripped = text.strip()
+        if not stripped:
+            return stripped
+        if stripped[-1] in {".", "!", "?"}:
+            return stripped
+        return f"{stripped}."
+
+    def resolve_voice_for_speaker(
+        self,
+        speaker: str | None,
+        voice: str | None = None,
+    ) -> str:
+        """根据说话人名称挑选合适声线。"""
+        if voice:
+            return voice
+        if not speaker:
+            return self.default_voice
+
+        normalized = self._normalize_speaker_name(speaker)
+        if normalized in self.named_speaker_voices:
+            return self.named_speaker_voices[normalized]
+
+        tokens = {token for token in re.split(r"[^a-z]+", normalized) if token}
+        if tokens & self.female_markers:
+            return FEMALE_VOICE
+        if tokens & self.male_markers:
+            return MALE_VOICE
+        if "teacher" in tokens:
+            return TEACHER_VOICE
+        if "student" in tokens:
+            return STUDENT_VOICE
+        return self.default_voice
+
+    @staticmethod
+    def _build_article_cache_keys(article_id: int) -> tuple[str, str, str]:
+        cache_prefix = f"tts:{ARTICLE_AUDIO_CACHE_VERSION}:article:{article_id}"
+        return (
+            f"{cache_prefix}:audio",
+            f"{cache_prefix}:timeline",
+            f"lock:{cache_prefix}",
+        )
+
     async def generate_audio_stream(self, article: ArticleContent):
-        """
-        [弃用] 使用新版带缓存的 generate_article_audio_bytes
-        """
+        """兼容旧调用的流式接口。"""
         if edge_tts is None:
             raise ImportError("edge_tts is not installed")
 
         for block in article.content:
-            voice = self.default_voice
-            speaker = block.speaker
-
-            if speaker:
-                if speaker in self.voices:
-                    voice = self.voices[speaker]
-                elif (
-                    "Mrs" in speaker
-                    or "Miss" in speaker
-                    or "Ms" in speaker
-                    or "Mother" in speaker
-                    or "Girl" in speaker
-                    or "Woman" in speaker
-                ):
-                    voice = self.voices["Female"]
-                elif "Mr" in speaker or "Father" in speaker or "Boy" in speaker or "Man" in speaker:
-                    voice = self.voices["Male"]
-
-            communicate = edge_tts.Communicate(block.en, voice)
-
+            voice = self.resolve_voice_for_speaker(block.speaker)
+            communicate = edge_tts.Communicate(
+                self._normalize_audio_text(block.en),
+                voice,
+                boundary="WordBoundary",
+            )
             async for chunk in communicate.stream():
                 audio_data = self._extract_audio_data(chunk)
                 if audio_data is not None:
                     yield audio_data
 
-    async def generate_article_audio_bytes(self, article: ArticleContent, article_id: int) -> bytes:
-        """
-        生成整篇文章的音频，并使用 Redis 缓存 30 天，带分布式锁防止并发生成
-        """
-        import base64
-        import logging
-
+    async def _get_cached_article_bundle(
+        self,
+        article_id: int,
+    ) -> tuple[bytes | None, list[dict[str, object]] | None]:
         from app.db.redis import get_redis
 
-        logger = logging.getLogger(__name__)
         redis_client = await get_redis()
-        cache_key = f"tts:article:{article_id}"
-        lock_key = f"lock:{cache_key}"
+        audio_key, timeline_key, _ = self._build_article_cache_keys(article_id)
+        cached_audio_b64 = await redis_client.execute_command("GET", audio_key)
+        cached_timeline = await redis_client.execute_command("GET", timeline_key)
 
-        # 1. 先检查缓存
-        cached_b64 = await redis_client.execute_command("GET", cache_key)
-        if cached_b64:
+        audio_bytes: bytes | None = None
+        timeline: list[dict[str, object]] | None = None
+
+        if cached_audio_b64:
             try:
-                return base64.b64decode(cached_b64)
+                audio_bytes = base64.b64decode(cached_audio_b64)
             except Exception:
-                pass  # 忽略旧的损坏缓存
+                audio_bytes = None
 
-        # 2. 获取分布式锁（文章生成较慢，锁超时设为 5 分钟）
+        if cached_timeline:
+            try:
+                timeline = json.loads(cached_timeline)
+            except Exception:
+                timeline = None
+
+        return audio_bytes, timeline
+
+    async def _store_article_bundle(
+        self,
+        article_id: int,
+        *,
+        audio_bytes: bytes,
+        timeline: list[dict[str, object]],
+    ) -> None:
+        from app.db.redis import get_redis
+
+        redis_client = await get_redis()
+        audio_key, timeline_key, _ = self._build_article_cache_keys(article_id)
+        audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+        timeline_json = json.dumps(timeline, ensure_ascii=False)
+        await redis_client.execute_command("SETEX", audio_key, ARTICLE_CACHE_TTL_SECONDS, audio_b64)
+        await redis_client.execute_command(
+            "SETEX", timeline_key, ARTICLE_CACHE_TTL_SECONDS, timeline_json
+        )
+
+    async def _get_or_create_article_bundle(
+        self,
+        article: ArticleContent,
+        article_id: int,
+    ) -> tuple[bytes, list[dict[str, object]]]:
+        from app.db.redis import get_redis
+
+        cached_audio, cached_timeline = await self._get_cached_article_bundle(article_id)
+        if cached_audio and cached_timeline is not None:
+            return cached_audio, cached_timeline
+
+        redis_client = await get_redis()
+        _, _, lock_key = self._build_article_cache_keys(article_id)
         lock = redis_client.lock(lock_key, timeout=300, blocking_timeout=30)
         acquired = await lock.acquire(blocking=True)
 
         if not acquired:
-            logger.warning(f"[TTS Lock] Failed to acquire lock for article: {article_id}")
-            # 锁获取失败，尝试直接生成（不缓存）
-            return await self._generate_article_audio_raw(article)
+            logger.warning("[TTS Lock] Failed to acquire lock for article %s", article_id)
+            return await self._generate_article_audio_bundle(article)
 
         try:
-            # 3. 双重检查
-            cached_b64 = await redis_client.execute_command("GET", cache_key)
-            if cached_b64:
-                try:
-                    return base64.b64decode(cached_b64)
-                except Exception:
-                    pass
+            cached_audio, cached_timeline = await self._get_cached_article_bundle(article_id)
+            if cached_audio and cached_timeline is not None:
+                return cached_audio, cached_timeline
 
-            logger.info(f"[TTS Lock] Generating audio for article: {article_id}")
-            audio_bytes = await self._generate_article_audio_raw(article)
-
-            # 4. 存入缓存
+            logger.info("[TTS Lock] Generating audio bundle for article %s", article_id)
+            audio_bytes, timeline = await self._generate_article_audio_bundle(article)
             if audio_bytes:
-                b64_data = base64.b64encode(audio_bytes).decode("ascii")
-                await redis_client.execute_command("SETEX", cache_key, 30 * 24 * 3600, b64_data)
-
-            return audio_bytes
+                await self._store_article_bundle(
+                    article_id,
+                    audio_bytes=audio_bytes,
+                    timeline=timeline,
+                )
+            return audio_bytes, timeline
         finally:
             try:
                 await lock.release()
             except Exception:
                 pass
 
-    async def _generate_article_audio_raw(self, article: ArticleContent) -> bytes:
-        """
-        原始文章音频生成（无缓存）
-        """
+    async def generate_article_audio_bytes(self, article: ArticleContent, article_id: int) -> bytes:
+        """生成整篇课文音频。"""
+        audio_bytes, _ = await self._get_or_create_article_bundle(article, article_id)
+        return audio_bytes
+
+    async def get_article_audio_timeline(
+        self,
+        article: ArticleContent,
+        article_id: int,
+    ) -> list[dict[str, object]]:
+        """获取整篇课文音频时间轴。"""
+        _, timeline = await self._get_or_create_article_bundle(article, article_id)
+        return timeline
+
+    async def _generate_article_audio_bundle(
+        self,
+        article: ArticleContent,
+    ) -> tuple[bytes, list[dict[str, object]]]:
+        """生成整篇课文音频和时间轴。"""
         if edge_tts is None:
             raise ImportError("edge_tts is not installed")
 
         audio_data = bytearray()
+        timeline: list[dict[str, object]] = []
+        offset_base_ms = 0
 
-        # 1. 朗读标题 (增加标点使其产生停顿)
-        title_comm = edge_tts.Communicate(f"{article.title}. . ", self.default_voice)
-        async for chunk in title_comm.stream():
-            audio_bytes = self._extract_audio_data(chunk)
-            if audio_bytes is not None:
-                audio_data.extend(audio_bytes)
+        for paragraph_index, block in enumerate(article.content):
+            voice = self.resolve_voice_for_speaker(block.speaker)
+            text_to_speak = self._normalize_audio_text(block.en)
+            communicate = edge_tts.Communicate(
+                text_to_speak,
+                voice,
+                boundary="WordBoundary",
+            )
 
-        # 2. 朗读正文
-        for block in article.content:
-            voice = self.default_voice
-            speaker = block.speaker
+            words: list[dict[str, object]] = []
+            segment_start_ms: int | None = None
+            segment_end_ms = offset_base_ms
 
-            if speaker:
-                if speaker in self.voices:
-                    voice = self.voices[speaker]
-                elif any(
-                    title in speaker for title in ["Mrs", "Miss", "Ms", "Mother", "Girl", "Woman"]
-                ):
-                    voice = self.voices["Female"]
-                elif any(title in speaker for title in ["Mr", "Father", "Boy", "Man"]):
-                    voice = self.voices["Male"]
-
-            # 在每段话结尾增加句号，利用 edge-tts 的特性生成自然的段落停顿，避免 MP3 直接拼接过于紧凑
-            text_to_speak = f"{block.en}. . "
-            communicate = edge_tts.Communicate(text_to_speak, voice)
             async for chunk in communicate.stream():
                 audio_bytes = self._extract_audio_data(chunk)
                 if audio_bytes is not None:
                     audio_data.extend(audio_bytes)
+                    continue
 
-        return bytes(audio_data)
+                if not self._is_word_boundary_chunk(chunk):
+                    continue
 
-    async def get_audio_bytes_cached(self, text: str, voice: str | None = None) -> bytes:
-        """
-        生成单句/单词音频，并缓存 30 天
-        """
-        import base64
-        import hashlib
+                word_text = str(chunk.get("text") or "").strip()
+                if not word_text:
+                    continue
 
+                start_ms = offset_base_ms + self._to_ms(chunk.get("offset"))
+                end_ms = max(
+                    start_ms + self._to_ms(chunk.get("duration")),
+                    start_ms + 1,
+                )
+                words.append(
+                    {
+                        "text": word_text,
+                        "start_ms": start_ms,
+                        "end_ms": end_ms,
+                    }
+                )
+                if segment_start_ms is None:
+                    segment_start_ms = start_ms
+                segment_end_ms = max(segment_end_ms, end_ms)
+
+            if segment_start_ms is None:
+                segment_start_ms = offset_base_ms
+
+            segment_end_ms += ARTICLE_SEGMENT_PADDING_MS
+            timeline.append(
+                {
+                    "paragraph_index": paragraph_index,
+                    "speaker": block.speaker,
+                    "text": block.en,
+                    "start_ms": segment_start_ms,
+                    "end_ms": segment_end_ms,
+                    "words": words,
+                }
+            )
+            offset_base_ms = segment_end_ms
+
+        return bytes(audio_data), timeline
+
+    async def get_audio_bytes_cached(
+        self,
+        text: str,
+        voice: str | None = None,
+        speaker: str | None = None,
+    ) -> bytes:
+        """生成单词或句子音频，并缓存 30 天。"""
         from app.db.redis import get_redis
 
         if edge_tts is None:
             raise ImportError("edge_tts is not installed")
 
-        voice = voice or self.default_voice
-        text_hash = hashlib.md5(f"{voice}:{text}".encode("utf-8")).hexdigest()
+        resolved_voice = self.resolve_voice_for_speaker(speaker, voice)
+        text_hash = hashlib.md5(f"{resolved_voice}:{text}".encode("utf-8")).hexdigest()
         cache_key = f"tts:single:{text_hash}"
-
         redis_client = await get_redis()
 
-        # 通过 base64 编码绕过 Redis 客户端可能存在的默认 UTF-8 解码问题
         cached_b64 = await redis_client.execute_command("GET", cache_key)
         if cached_b64:
             try:
                 return base64.b64decode(cached_b64)
             except Exception:
-                pass  # 忽略旧的损坏缓存
+                pass
 
-        communicate = edge_tts.Communicate(text, voice)
-        audio_data = bytearray()
-        async for chunk in communicate.stream():
-            audio_bytes = self._extract_audio_data(chunk)
-            if audio_bytes is not None:
-                audio_data.extend(audio_bytes)
-
-        audio_bytes = bytes(audio_data)
+        audio_bytes = await self._generate_audio_raw(text, resolved_voice)
         if audio_bytes:
-            # 存入前进行 base64 编码，确保写入的是纯文本字符
             b64_data = base64.b64encode(audio_bytes).decode("ascii")
-            await redis_client.execute_command("SETEX", cache_key, 30 * 24 * 3600, b64_data)
-
+            await redis_client.execute_command(
+                "SETEX", cache_key, ARTICLE_CACHE_TTL_SECONDS, b64_data
+            )
         return audio_bytes
 
     async def get_audio_bytes_cached_with_lock(
-        self, 
-        text: str, 
+        self,
+        text: str,
         voice: str | None = None,
         speed: float = 1.0,
+        speaker: str | None = None,
     ) -> bytes:
-        """
-        生成单句/单词音频，带分布式锁防止缓存击穿
-        
-        适用于高并发场景，确保同一音频只生成一次
-        """
-        import base64
-        import hashlib
-        import logging
-
+        """生成单词或句子音频，并用分布式锁避免缓存击穿。"""
         from app.db.redis import get_redis
-
-        logger = logging.getLogger(__name__)
 
         if edge_tts is None:
             raise ImportError("edge_tts is not installed")
 
-        voice = voice or self.default_voice
-        # speed 参数参与 key 计算，不同语速视为不同音频
-        text_hash = hashlib.md5(f"{voice}:{speed}:{text}".encode("utf-8")).hexdigest()
+        resolved_voice = self.resolve_voice_for_speaker(speaker, voice)
+        text_hash = hashlib.md5(
+            f"{resolved_voice}:{speed}:{text}".encode("utf-8"),
+        ).hexdigest()
         cache_key = f"tts:single:{text_hash}"
         lock_key = f"lock:{cache_key}"
-
         redis_client = await get_redis()
 
-        # 1. 先检查缓存
         cached_b64 = await redis_client.execute_command("GET", cache_key)
         if cached_b64:
             try:
                 return base64.b64decode(cached_b64)
             except Exception:
-                pass  # 忽略旧的损坏缓存
+                pass
 
-        # 2. 获取分布式锁（防止多个请求同时生成同一音频）
-        # 锁超时 2 分钟，足够生成单个单词音频
         lock = redis_client.lock(lock_key, timeout=120, blocking_timeout=10)
         acquired = await lock.acquire(blocking=True)
 
         if not acquired:
-            logger.warning(f"[TTS Lock] Failed to acquire lock for: {text[:50]}...")
-            # 锁获取失败，尝试直接生成（不缓存）
-            return await self._generate_audio_raw(text, voice, speed)
+            logger.warning("[TTS Lock] Failed to acquire lock for text: %s", text[:50])
+            return await self._generate_audio_raw(text, resolved_voice, speed)
 
         try:
-            # 3. 双重检查（获取锁后再次检查缓存）
             cached_b64 = await redis_client.execute_command("GET", cache_key)
             if cached_b64:
                 try:
@@ -296,34 +419,29 @@ class TTSService:
                 except Exception:
                     pass
 
-            # 4. 生成音频
-            logger.info(f"[TTS Lock] Generating audio for: {text[:50]}...")
-            audio_bytes = await self._generate_audio_raw(text, voice, speed)
-
-            # 5. 存入缓存
+            audio_bytes = await self._generate_audio_raw(text, resolved_voice, speed)
             if audio_bytes:
                 b64_data = base64.b64encode(audio_bytes).decode("ascii")
-                await redis_client.execute_command("SETEX", cache_key, 30 * 24 * 3600, b64_data)
-                logger.info(f"[TTS Lock] Cached audio for: {text[:50]}...")
-
+                await redis_client.execute_command(
+                    "SETEX", cache_key, ARTICLE_CACHE_TTL_SECONDS, b64_data
+                )
             return audio_bytes
-
         finally:
-            # 6. 释放锁
             try:
                 await lock.release()
             except Exception:
                 pass
 
-    async def _generate_audio_raw(self, text: str, voice: str, speed: float = 1.0) -> bytes:
-        """
-        原始音频生成（无缓存）
-        """
+    async def _generate_audio_raw(
+        self,
+        text: str,
+        voice: str,
+        speed: float = 1.0,
+    ) -> bytes:
+        """原始音频生成。"""
         if edge_tts is None:
             raise ImportError("edge_tts is not installed")
 
-        # 根据语速调整文本（edge-tts 通过 rate 参数控制）
-        # rate: 可以是百分比如 "+50%" 或 "-20%"
         rate_str = "+0%"
         if speed > 1.0:
             rate_str = f"+{int((speed - 1) * 100)}%"
@@ -336,59 +454,27 @@ class TTSService:
             audio_bytes = self._extract_audio_data(chunk)
             if audio_bytes is not None:
                 audio_data.extend(audio_bytes)
-
         return bytes(audio_data)
 
-    async def warmup_article_audio(self, article_id: int, article: "ArticleContent") -> None:
-        """
-        异步预热文章音频，带分布式锁防止缓存击穿
-
-        适用于文章生成后后台预热，不阻塞主流程
-        """
-        import logging
-
+    async def warmup_article_audio(self, article_id: int, article: ArticleContent) -> None:
+        """异步预热课文音频和时间轴。"""
         from app.db.redis import get_redis
 
-        logger = logging.getLogger(__name__)
         redis_client = await get_redis()
-        lock_key = f"lock:tts:warmup:{article_id}"
-        cache_key = f"tts:article:{article_id}"
-
-        # 先检查是否已缓存
-        cached = await redis_client.execute_command("GET", cache_key)
-        if cached:
-            logger.debug(f"[TTS Warmup] Article {article_id} already cached, skipping")
-            return
-
-        # 尝试获取分布式锁，防止多个进程同时预热同一文章
-        # 锁超时 5 分钟，足够生成音频
-        lock = redis_client.lock(lock_key, timeout=300, blocking_timeout=0)
+        _, _, lock_key = self._build_article_cache_keys(article_id)
+        lock = redis_client.lock(f"lock:{lock_key}:warmup", timeout=300, blocking_timeout=0)
         acquired = await lock.acquire(blocking=False)
 
         if not acquired:
-            logger.debug(
-                f"[TTS Warmup] Another process is warming up article {article_id}, skipping"
-            )
+            logger.debug("[TTS Warmup] Another process is warming article %s", article_id)
             return
 
         try:
-            logger.info(f"[TTS Warmup] Starting warmup for article {article_id}")
-
-            # 再次检查（Double Check）
-            cached_after_lock = await redis_client.execute_command("GET", cache_key)
-            if cached_after_lock:
-                logger.debug(f"[TTS Warmup] Article {article_id} cached after lock, skipping")
-                return
-
-            # 异步生成音频
-            await self.generate_article_audio_bytes(article, article_id)
-            logger.info(f"[TTS Warmup] Completed warmup for article {article_id}")
-
-        except Exception as e:
-            logger.warning(f"[TTS Warmup] Failed to warmup article {article_id}: {e}")
-            # 预热失败不影响主流程，只是用户首次播放可能需要等待
+            await self._get_or_create_article_bundle(article, article_id)
+            logger.info("[TTS Warmup] Completed warmup for article %s", article_id)
+        except Exception as exc:
+            logger.warning("[TTS Warmup] Failed for article %s: %s", article_id, exc)
         finally:
-            # 确保释放锁
             try:
                 await lock.release()
             except Exception:

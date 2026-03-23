@@ -64,6 +64,33 @@ class ArticleContent(BaseModel):
     exercises: list[Exercise] | None = Field(None, description="课后练习")
 
 
+class ArticleAudioWordTiming(BaseModel):
+    """全文朗读的单词时间轴。"""
+
+    text: str = Field(..., description="单词文本")
+    start_ms: int = Field(..., ge=0, description="开始时间，毫秒")
+    end_ms: int = Field(..., ge=0, description="结束时间，毫秒")
+
+
+class ArticleAudioSegmentTiming(BaseModel):
+    """全文朗读的段落时间轴。"""
+
+    paragraph_index: int = Field(..., ge=0, description="段落索引")
+    speaker: str | None = Field(None, description="说话人")
+    text: str = Field(..., description="英文段落文本")
+    start_ms: int = Field(..., ge=0, description="开始时间，毫秒")
+    end_ms: int = Field(..., ge=0, description="结束时间，毫秒")
+    words: list[ArticleAudioWordTiming] = Field(default_factory=list, description="段内单词时间轴")
+
+
+class ArticleAudioTimelineResponse(BaseModel):
+    """全文朗读时间轴响应。"""
+
+    segments: list[ArticleAudioSegmentTiming] = Field(
+        default_factory=list, description="段落时间轴"
+    )
+
+
 class ArticleResponse(BaseModel):
     """文章响应。"""
 

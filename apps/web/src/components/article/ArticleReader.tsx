@@ -3,6 +3,7 @@ import {
   lazy,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -12,8 +13,12 @@ import { Col, Row, message } from 'antd';
 
 import type { SentenceBreakdownResponse } from '@/api/aiChat';
 import { getSentenceBreakdown } from '@/api/aiChat';
-import type { Article, ExerciseResultItem } from '@/api/article';
-import { generateArticleAudio } from '@/api/article';
+import type {
+  Article,
+  ArticleAudioTimelineResponse,
+  ExerciseResultItem,
+} from '@/api/article';
+import { getArticleAudioTimeline } from '@/api/article';
 import { getNotes, type Note } from '@/api/note';
 
 import { ArticleAIChatDrawer } from './ArticleAIChatDrawer';
@@ -51,6 +56,14 @@ interface SentenceHelperTarget {
   paragraphIndex: number;
 }
 
+function buildParagraphAudioUrl(text: string, speaker?: string): string {
+  const params = new URLSearchParams({ word: text });
+  if (speaker) {
+    params.set('speaker', speaker);
+  }
+  return `/api/v1/tts/audio?${params.toString()}`;
+}
+
 export function ArticleReader({
   article,
   onProgressUpdate,
@@ -66,9 +79,13 @@ export function ArticleReader({
   >({});
   const [checkedMap, setCheckedMap] = useState<Record<number, boolean>>({});
   const [readProgress, setReadProgress] = useState(article.is_read || 0);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioTimeline, setAudioTimeline] =
+    useState<ArticleAudioTimelineResponse | null>(null);
   const [loadingAudio, setLoadingAudio] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentPlaybackParagraphIndex, setCurrentPlaybackParagraphIndex] =
+    useState<number | null>(null);
+  const [currentSegmentElapsedMs, setCurrentSegmentElapsedMs] = useState(0);
   const [isNoteEditorOpen, setIsNoteEditorOpen] = useState(false);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [isCompletionOpen, setIsCompletionOpen] = useState(false);
@@ -79,10 +96,11 @@ export function ArticleReader({
   const [helperData, setHelperData] =
     useState<SentenceBreakdownResponse | null>(null);
   const [currentNote, setCurrentNote] = useState<Note | null>(null);
-  const [exerciseSummary, setExerciseSummary] = useState<ExerciseSummary>();
   const [loadingTTSKey, setLoadingTTSKey] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const singleAudioCache = useRef<Record<string, HTMLAudioElement>>({});
+  const currentAudioUrlRef = useRef<string | null>(null);
+  const isAdvancingSegmentRef = useRef(false);
   const exercises = article.exercises ?? EMPTY_EXERCISES;
 
   useEffect(() => {
@@ -94,7 +112,6 @@ export function ArticleReader({
     setActiveTab('tips');
     setExerciseAnswers({});
     setCheckedMap({});
-    setExerciseSummary(undefined);
     setHelperOpen(false);
     setHelperTarget(null);
     setHelperData(null);
@@ -102,23 +119,38 @@ export function ArticleReader({
     setIsAIChatOpen(false);
     setIsCompletionOpen(false);
     setLoadingTTSKey(null);
+    setAudioTimeline(null);
+    setCurrentPlaybackParagraphIndex(null);
+    setCurrentSegmentElapsedMs(0);
+    setIsPlaying(false);
+    currentAudioUrlRef.current = null;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.removeAttribute('src');
+      audioRef.current.load();
+    }
   }, [article.id, article.is_read]);
 
-  useEffect(() => {
-    return () => {
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
+  const sentenceBreakdownRequest = useRequest(
+    async (params: {
+      sentence: string;
+      article_id?: number;
+      paragraph_index?: number;
+    }) => {
+      try {
+        return await getSentenceBreakdown(params);
+      } catch {
+        return getSentenceBreakdown(params);
       }
-    };
-  }, [audioUrl]);
-
-  const sentenceBreakdownRequest = useRequest(getSentenceBreakdown, {
-    manual: true,
-    onSuccess: (data) => setHelperData(data),
-    onError: () => {
-      message.error('句子拆解暂时失败，请稍后再试');
     },
-  });
+    {
+      manual: true,
+      onSuccess: (data) => setHelperData(data),
+      onError: () => {
+        message.error('句子拆解暂时失败，请稍后再试');
+      },
+    },
+  );
 
   const articleNoteRequest = useRequest(
     async () => {
@@ -152,28 +184,30 @@ export function ArticleReader({
     });
   }, [exerciseAnswers, exercises]);
 
-  useEffect(() => {
-    if (!onExerciseUpdate || exercises.length === 0) {
-      return;
-    }
-
+  const exerciseSummary = useMemo<ExerciseSummary | undefined>(() => {
     const checkedIndexes = Object.keys(checkedMap);
-    if (checkedIndexes.length === 0) {
-      return;
+    if (checkedIndexes.length === 0 || exercises.length === 0) {
+      return undefined;
     }
 
     const results = buildExerciseResults();
-    const summary = {
+    return {
       correct: results.filter((item) => item.is_correct).length,
       total: exercises.length,
       results,
     };
-    setExerciseSummary(summary);
-    onExerciseUpdate(summary);
-  }, [buildExerciseResults, checkedMap, exercises.length, onExerciseUpdate]);
+  }, [buildExerciseResults, checkedMap, exercises.length]);
 
-  const playSingleTTS = useCallback(async (text: string) => {
-    const cachedAudio = singleAudioCache.current[text];
+  useEffect(() => {
+    if (!onExerciseUpdate || !exerciseSummary) {
+      return;
+    }
+    onExerciseUpdate(exerciseSummary);
+  }, [exerciseSummary, onExerciseUpdate]);
+
+  const playSingleTTS = useCallback(async (text: string, speaker?: string) => {
+    const cacheKey = `${speaker ?? 'default'}::${text}`;
+    const cachedAudio = singleAudioCache.current[cacheKey];
     setLoadingTTSKey(text);
 
     if (cachedAudio) {
@@ -188,9 +222,8 @@ export function ArticleReader({
       return;
     }
 
-    const url = `/api/v1/tts/audio?word=${encodeURIComponent(text)}`;
-    const audio = new Audio(url);
-    singleAudioCache.current[text] = audio;
+    const audio = new Audio(buildParagraphAudioUrl(text, speaker));
+    singleAudioCache.current[cacheKey] = audio;
 
     try {
       await audio.play();
@@ -201,32 +234,79 @@ export function ArticleReader({
     }
   }, []);
 
+  const ensureAudioTimeline = useCallback(async () => {
+    if (audioTimeline) {
+      return audioTimeline;
+    }
+
+    try {
+      const nextTimeline = await getArticleAudioTimeline(article.id);
+      setAudioTimeline(nextTimeline);
+      return nextTimeline;
+    } catch {
+      const retryTimeline = await getArticleAudioTimeline(article.id);
+      setAudioTimeline(retryTimeline);
+      return retryTimeline;
+    }
+  }, [article.id, audioTimeline]);
+
+  const playParagraphSegment = useCallback(
+    async (paragraphIndex: number, resetCurrentTime = true) => {
+      const audioElement = audioRef.current;
+      const paragraph = article.content[paragraphIndex];
+
+      if (!audioElement || !paragraph) {
+        return;
+      }
+
+      const nextUrl = buildParagraphAudioUrl(paragraph.en, paragraph.speaker);
+      if (currentAudioUrlRef.current !== nextUrl) {
+        currentAudioUrlRef.current = nextUrl;
+        audioElement.src = nextUrl;
+      }
+      if (resetCurrentTime) {
+        audioElement.currentTime = 0;
+      }
+
+      setCurrentPlaybackParagraphIndex(paragraphIndex);
+      setCurrentSegmentElapsedMs(Math.round(audioElement.currentTime * 1000));
+      await audioElement.play();
+      setIsPlaying(true);
+    },
+    [article.content],
+  );
+
   const toggleAudio = async () => {
-    if (isPlaying) {
-      audioRef.current?.pause();
-      setIsPlaying(false);
+    const audioElement = audioRef.current;
+    if (!audioElement) {
       return;
     }
 
-    if (audioUrl) {
-      await audioRef.current?.play();
-      setIsPlaying(true);
+    if (isPlaying) {
+      audioElement.pause();
+      setIsPlaying(false);
       return;
     }
 
     setLoadingAudio(true);
     try {
-      const nextAudioUrl = await generateArticleAudio(article.id);
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
+      try {
+        await ensureAudioTimeline();
+      } catch {
+        message.warning('时间线准备失败，本次将先播放音频，高亮会稍后恢复');
       }
-      setAudioUrl(nextAudioUrl);
-      window.setTimeout(() => {
-        void audioRef.current?.play();
+
+      if (
+        currentPlaybackParagraphIndex !== null &&
+        currentAudioUrlRef.current
+      ) {
+        await audioElement.play();
         setIsPlaying(true);
-      }, 60);
+      } else {
+        await playParagraphSegment(0);
+      }
     } catch {
-      message.error('文章音频生成失败，请稍后重试');
+      message.error('课文朗读暂时失败，请稍后重试');
     } finally {
       setLoadingAudio(false);
     }
@@ -250,16 +330,36 @@ export function ArticleReader({
     }));
   };
 
-  const checkAnswer = (exerciseIndex: number) => {
+  const checkAnswer = (exerciseIndex: number, answerOverride?: string) => {
     const nextCheckedMap = { ...checkedMap, [exerciseIndex]: true };
     setCheckedMap(nextCheckedMap);
 
-    const currentResults = buildExerciseResults();
-    const finishedCount = Object.keys(nextCheckedMap).length;
-    const nextProgress =
-      finishedCount === exercises.length && exercises.length > 0
-        ? Math.max(readProgress, 80)
-        : Math.max(readProgress, 70);
+    const nextAnswers =
+      answerOverride === undefined
+        ? exerciseAnswers
+        : {
+            ...exerciseAnswers,
+            [exerciseIndex]: answerOverride,
+          };
+    const currentResults = exercises.map((exercise, index) => {
+      const expectedAnswer = exercise.answer || '';
+      const userAnswer = nextAnswers[index] || '';
+      return {
+        question: exercise.question,
+        expected_answer: expectedAnswer,
+        user_answer: userAnswer,
+        is_correct:
+          normalizeAnswer(userAnswer) === normalizeAnswer(expectedAnswer),
+      };
+    });
+    const answeredCount = exercises.filter((_, index) =>
+      Boolean(normalizeAnswer(nextAnswers[index])),
+    ).length;
+    const exerciseProgress =
+      exercises.length === 0
+        ? 50
+        : Math.round((answeredCount / exercises.length) * 50);
+    const nextProgress = Math.max(readProgress, exerciseProgress);
 
     setReadProgress(nextProgress);
     onProgressUpdate?.(nextProgress, false, currentResults);
@@ -280,6 +380,41 @@ export function ArticleReader({
     void articleNoteRequest.run();
   };
 
+  const handleAudioEnded = () => {
+    if (isAdvancingSegmentRef.current) {
+      return;
+    }
+
+    const nextIndex =
+      currentPlaybackParagraphIndex === null
+        ? null
+        : currentPlaybackParagraphIndex + 1;
+
+    if (nextIndex === null || nextIndex >= article.content.length) {
+      setIsPlaying(false);
+      setCurrentPlaybackParagraphIndex(null);
+      setCurrentSegmentElapsedMs(0);
+      currentAudioUrlRef.current = null;
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+      }
+      return;
+    }
+
+    isAdvancingSegmentRef.current = true;
+    setCurrentSegmentElapsedMs(0);
+    void playParagraphSegment(nextIndex)
+      .catch(() => {
+        message.error('课文朗读中断，请稍后重试');
+        setIsPlaying(false);
+        setCurrentPlaybackParagraphIndex(null);
+        setCurrentSegmentElapsedMs(0);
+      })
+      .finally(() => {
+        isAdvancingSegmentRef.current = false;
+      });
+  };
+
   return (
     <div className="mx-auto w-full">
       <ArticleReaderHeader
@@ -294,18 +429,25 @@ export function ArticleReader({
         <ArticleReadingPane
           article={article}
           audioRef={audioRef}
-          audioUrl={audioUrl}
+          audioTimeline={audioTimeline}
           loadingAudio={loadingAudio}
           isPlaying={isPlaying}
+          currentPlaybackParagraphIndex={currentPlaybackParagraphIndex}
+          currentSegmentElapsedMs={currentSegmentElapsedMs}
           showChinese={showChinese}
           loadingTTSKey={loadingTTSKey}
           onToggleAudio={() => void toggleAudio()}
           onToggleChinese={() => setShowChinese((value) => !value)}
-          onPlaySingleTTS={(text) => void playSingleTTS(text)}
+          onPlaySingleTTS={(text, speaker) => void playSingleTTS(text, speaker)}
           onOpenSentenceHelper={openSentenceHelper}
-          onAudioEnded={() => setIsPlaying(false)}
-          onAudioPause={() => setIsPlaying(false)}
+          onAudioEnded={handleAudioEnded}
+          onAudioPause={() => {
+            if (!isAdvancingSegmentRef.current) {
+              setIsPlaying(false);
+            }
+          }}
           onAudioPlay={() => setIsPlaying(true)}
+          onAudioTimeUpdate={setCurrentSegmentElapsedMs}
         />
 
         <Col xs={24} lg={10} xl={9}>

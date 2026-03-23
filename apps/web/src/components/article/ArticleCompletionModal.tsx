@@ -1,17 +1,7 @@
 import type { RadioChangeEvent } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircleOutlined, ReadOutlined } from '@ant-design/icons';
-import {
-  Alert,
-  Button as AntButton,
-  Input,
-  Modal,
-  Radio,
-  Space,
-  Tabs,
-  Tag,
-  Typography,
-} from 'antd';
+import { Alert, Input, Modal, Radio, Space, Tabs, Tag, Typography } from 'antd';
 
 import type { Article, ExerciseResultItem } from '@/api/article';
 import type { SpeechAnalyzeResponse } from '@/api/speech';
@@ -27,6 +17,7 @@ import { SpeechPracticePanel } from './SpeechPracticePanel';
 const { Paragraph, Title } = Typography;
 
 const READING_PASS_SCORE = 65;
+const AUTO_CHECK_DELAY_MS = 550;
 
 interface ArticleCompletionModalProps {
   open: boolean;
@@ -37,7 +28,7 @@ interface ArticleCompletionModalProps {
   loading?: boolean;
   onClose: () => void;
   onAnswerSelect: (exerciseIndex: number, answer: string) => void;
-  onCheckAnswer: (exerciseIndex: number) => void;
+  onCheckAnswer: (exerciseIndex: number, answerOverride?: string) => void;
   onComplete: (exerciseResults: ExerciseResultItem[]) => void;
 }
 
@@ -70,8 +61,18 @@ export function ArticleCompletionModal({
   const [speechResult, setSpeechResult] =
     useState<SpeechAnalyzeResponse | null>(null);
   const hasTriggeredCompleteRef = useRef(false);
+  const autoCheckTimersRef = useRef<Record<number, number>>({});
 
   const exercises = article.exercises ?? EMPTY_EXERCISES;
+  const exerciseAnsweredCount = useMemo(() => {
+    if (exercises.length === 0) {
+      return 0;
+    }
+    return exercises.filter((_, index) =>
+      Boolean(normalizeAnswer(exerciseAnswers[index])),
+    ).length;
+  }, [exerciseAnswers, exercises]);
+
   const exercisePassed = useMemo(() => {
     if (exercises.length === 0) {
       return true;
@@ -82,12 +83,25 @@ export function ArticleCompletionModal({
   }, [exerciseSummary?.correct, exerciseSummary?.total, exercises.length]);
 
   const readingPassed = isReadingPassed(speechResult);
+  const exerciseProgressPercent =
+    exercises.length === 0
+      ? 50
+      : Math.round((exerciseAnsweredCount / exercises.length) * 50);
+  const totalProgressPercent = readingPassed
+    ? 100
+    : exercisePassed
+      ? 50
+      : exerciseProgressPercent;
 
   useEffect(() => {
     if (!open) {
       setActiveTab(exercises.length > 0 ? 'exercise' : 'reading');
       setSpeechResult(null);
       hasTriggeredCompleteRef.current = false;
+      Object.values(autoCheckTimersRef.current).forEach((timerId) =>
+        window.clearTimeout(timerId),
+      );
+      autoCheckTimersRef.current = {};
       return;
     }
 
@@ -118,6 +132,22 @@ export function ArticleCompletionModal({
     readingPassed,
   ]);
 
+  const scheduleFillAutoCheck = (exerciseIndex: number, value: string) => {
+    const previousTimer = autoCheckTimersRef.current[exerciseIndex];
+    if (previousTimer) {
+      window.clearTimeout(previousTimer);
+    }
+
+    if (!normalizeAnswer(value)) {
+      return;
+    }
+
+    autoCheckTimersRef.current[exerciseIndex] = window.setTimeout(() => {
+      onCheckAnswer(exerciseIndex, value);
+      delete autoCheckTimersRef.current[exerciseIndex];
+    }, AUTO_CHECK_DELAY_MS);
+  };
+
   return (
     <Modal
       open={open}
@@ -128,13 +158,20 @@ export function ArticleCompletionModal({
       onCancel={onClose}
       title="完成本课"
       footer={null}
+      styles={{
+        body: {
+          maxHeight: '72vh',
+          overflowY: 'auto',
+          paddingRight: 12,
+        },
+      }}
     >
       <div className="space-y-5">
         <Alert
           type="info"
           showIcon
           message="完成规则"
-          description="先做练习，练习全部通过后再进入朗读模块。朗读校验通过后，会自动完成本课。"
+          description={`练习阶段占 50%，朗读阶段占 50%。练习全部通过后会自动进入朗读模块，朗读通过后自动完成本课。当前完成度 ${totalProgressPercent}%。`}
         />
 
         <Tabs
@@ -158,14 +195,16 @@ export function ArticleCompletionModal({
                           先完成当前课后练习
                         </Title>
                         <Paragraph className="!mb-0 text-gray-600">
-                          练习全部答对后，系统会自动带你进入朗读模块。
+                          选择题会自动校验，填空题在你停顿后自动校验。答错可以继续改，全部通过后会自动进入朗读模块。
                         </Paragraph>
                       </div>
                       <Tag
                         color={exercisePassed ? 'success' : 'processing'}
                         className="m-0 rounded-full px-4 py-1 text-sm"
                       >
-                        {exercisePassed ? '已通过' : '待完成'}
+                        {exercisePassed
+                          ? '已通过 · 50%'
+                          : `进行中 · ${exerciseProgressPercent}%`}
                       </Tag>
                     </div>
                   </Card>
@@ -177,6 +216,7 @@ export function ArticleCompletionModal({
                       const isCorrect =
                         normalizeAnswer(currentAnswer) ===
                         normalizeAnswer(exercise.answer);
+                      const isLocked = isChecked && isCorrect;
 
                       return (
                         <div
@@ -199,9 +239,11 @@ export function ArticleCompletionModal({
                           {exercise.type === 'choice' && exercise.options ? (
                             <Radio.Group
                               value={currentAnswer}
-                              onChange={(event: RadioChangeEvent) =>
-                                onAnswerSelect(index, event.target.value)
-                              }
+                              onChange={(event: RadioChangeEvent) => {
+                                const nextValue = String(event.target.value);
+                                onAnswerSelect(index, nextValue);
+                                onCheckAnswer(index, nextValue);
+                              }}
                               className="w-full"
                             >
                               <Space direction="vertical" className="w-full">
@@ -209,7 +251,7 @@ export function ArticleCompletionModal({
                                   <Radio
                                     key={option}
                                     value={option}
-                                    disabled={isChecked}
+                                    disabled={isLocked}
                                     className="m-0 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"
                                   >
                                     {option}
@@ -222,27 +264,28 @@ export function ArticleCompletionModal({
                           {exercise.type === 'fill' ? (
                             <Input
                               value={currentAnswer}
-                              disabled={isChecked}
-                              onChange={(event) =>
-                                onAnswerSelect(index, event.target.value)
-                              }
+                              disabled={isLocked}
+                              onChange={(event) => {
+                                const nextValue = event.target.value;
+                                onAnswerSelect(index, nextValue);
+                                scheduleFillAutoCheck(index, nextValue);
+                              }}
+                              onPressEnter={() => {
+                                if (normalizeAnswer(currentAnswer)) {
+                                  onCheckAnswer(index, currentAnswer);
+                                }
+                              }}
+                              onBlur={() => {
+                                if (normalizeAnswer(currentAnswer)) {
+                                  onCheckAnswer(index, currentAnswer);
+                                }
+                              }}
                               placeholder="请输入答案"
                               className="rounded-xl"
                             />
                           ) : null}
 
-                          {!isChecked ? (
-                            <AntButton
-                              type="primary"
-                              shape="round"
-                              size="large"
-                              className="mt-5 border-0 bg-gradient-to-r from-amber-500 to-orange-500"
-                              disabled={!currentAnswer}
-                              onClick={() => onCheckAnswer(index)}
-                            >
-                              检查答案
-                            </AntButton>
-                          ) : (
+                          {isChecked && normalizeAnswer(currentAnswer) ? (
                             <div
                               className={`mt-5 rounded-xl px-4 py-3 text-sm font-medium ${
                                 isCorrect
@@ -252,9 +295,9 @@ export function ArticleCompletionModal({
                             >
                               {isCorrect
                                 ? '回答正确，做得很好。'
-                                : `正确答案：${exercise.answer || ''}`}
+                                : `还差一点，正确答案是：${exercise.answer || ''}`}
                             </div>
-                          )}
+                          ) : null}
                         </div>
                       );
                     })
@@ -280,11 +323,11 @@ export function ArticleCompletionModal({
                   <Alert
                     type={readingPassed ? 'success' : 'warning'}
                     showIcon
-                    message={readingPassed ? '朗读已通过' : '朗读通过线'}
+                    message={readingPassed ? '朗读已通过 · 100%' : '朗读通过线'}
                     description={
                       readingPassed
                         ? '朗读校验已通过，系统正在为你完成本课。'
-                        : `建议至少达到 ${READING_PASS_SCORE}% 内容覆盖度，且识别稳定度不能为“偏低”。`
+                        : `朗读阶段占剩余 50%。建议至少达到 ${READING_PASS_SCORE}% 内容覆盖度，且识别稳定度不能是“偏低”。`
                     }
                   />
                   <SpeechPracticePanel

@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { MessageOutlined, SendOutlined } from '@ant-design/icons';
 import { App, Button, Drawer, Input, Typography } from 'antd';
-import { useRequest } from 'ahooks';
 
-import { sendAIChatMessage } from '@/api/aiChat';
+import { streamAIChatMessage } from '@/api/aiChat';
 import type { Article } from '@/api/article';
 
 const { Paragraph, Text, Title } = Typography;
@@ -24,7 +23,7 @@ function buildWelcomeMessage(title: string): ChatMessage {
   return {
     id: 'welcome',
     role: 'assistant',
-    content: `可以围绕《${title}》直接问我。你可以继续追问句子、词语、表达场景，也可以把你想说的中文发给我，我帮你贴着课文来表达。`,
+    content: `可以围绕《${title}》直接问我。你可以继续追问句子、词语、表达场景，也可以把你想说的中文发给我，我会贴着课文来帮你表达。`,
   };
 }
 
@@ -38,21 +37,26 @@ export function ArticleAIChatDrawer({
   const [messages, setMessages] = useState<ChatMessage[]>([
     buildWelcomeMessage(article.title),
   ]);
+  const [isStreaming, setIsStreaming] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-
-  const sendRequest = useRequest(sendAIChatMessage, {
-    manual: true,
-  });
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setInput('');
     setMessages([buildWelcomeMessage(article.title)]);
+    setIsStreaming(false);
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
   }, [article.id, article.title]);
 
   useEffect(() => {
     if (!open) {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      setIsStreaming(false);
       return;
     }
+
     window.requestAnimationFrame(() => {
       const container = scrollContainerRef.current;
       if (!container) {
@@ -60,11 +64,11 @@ export function ArticleAIChatDrawer({
       }
       container.scrollTop = container.scrollHeight;
     });
-  }, [messages, open, sendRequest.loading]);
+  }, [messages, open, isStreaming]);
 
   const handleSend = async () => {
     const trimmed = input.trim();
-    if (!trimmed || sendRequest.loading) {
+    if (!trimmed || isStreaming) {
       return;
     }
 
@@ -73,27 +77,56 @@ export function ArticleAIChatDrawer({
       role: 'user',
       content: trimmed,
     };
+    const assistantMessageId = `assistant-${Date.now()}`;
 
-    setMessages((previous) => [...previous, userMessage]);
+    setMessages((previous) => [
+      ...previous,
+      userMessage,
+      {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: '',
+      },
+    ]);
     setInput('');
+    setIsStreaming(true);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     try {
-      const response = await sendRequest.runAsync({
-        mode: 'lesson',
-        message: trimmed,
-        article_id: article.id,
-      });
-
-      setMessages((previous) => [
-        ...previous,
+      await streamAIChatMessage(
         {
-          id: `assistant-${Date.now()}`,
-          role: 'assistant',
-          content: response.reply,
+          mode: 'lesson',
+          message: trimmed,
+          article_id: article.id,
         },
-      ]);
-    } catch {
-      message.error('课文对话发送失败，请稍后重试');
+        {
+          signal: controller.signal,
+          onChunk: (_chunk, accumulated) => {
+            setMessages((previous) =>
+              previous.map((item) =>
+                item.id === assistantMessageId
+                  ? { ...item, content: accumulated }
+                  : item,
+              ),
+            );
+          },
+        },
+      );
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        return;
+      }
+      setMessages((previous) =>
+        previous.filter((item) => item.id !== assistantMessageId),
+      );
+      message.error((error as Error).message || '课文对话发送失败，请稍后重试');
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      setIsStreaming(false);
     }
   };
 
@@ -140,18 +173,18 @@ export function ArticleAIChatDrawer({
                   item.role === 'assistant' ? 'text-gray-700' : 'text-white'
                 }`}
               >
-                {item.content}
+                {item.content ||
+                  (isStreaming && item.role === 'assistant'
+                    ? '正在组织答案...'
+                    : '')}
               </Paragraph>
             </div>
           ))}
 
-          {sendRequest.loading ? (
-            <div className="mr-10 rounded-3xl bg-slate-50 px-5 py-4">
-              <div className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-                AI
-              </div>
-              <Text className="text-gray-500">正在组织答案...</Text>
-            </div>
+          {isStreaming ? (
+            <Text className="block pl-2 text-xs text-gray-400">
+              AI 正在流式输出...
+            </Text>
           ) : null}
         </div>
 
@@ -175,7 +208,7 @@ export function ArticleAIChatDrawer({
             </Text>
             <Button
               type="primary"
-              loading={sendRequest.loading}
+              loading={isStreaming}
               className="border-0 bg-gradient-to-r from-amber-500 to-orange-500 px-6"
               icon={<SendOutlined />}
               onClick={() => void handleSend()}

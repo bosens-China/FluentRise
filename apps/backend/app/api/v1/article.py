@@ -19,6 +19,7 @@ from app.models.article import Article
 from app.models.learning_feedback import LearningFeedback
 from app.models.vocabulary import Vocabulary
 from app.schemas.article import (
+    ArticleAudioTimelineResponse,
     ArticleContent,
     ArticleListItem,
     ArticleListResponse,
@@ -332,6 +333,48 @@ async def generate_article_audio(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"音频生成失败: {exc}",
         ) from exc
+
+
+@router.get("/{article_id}/audio-timeline", response_model=ArticleAudioTimelineResponse)
+async def get_article_audio_timeline(
+    article_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user),
+) -> Any:
+    """获取全文朗读时间轴。"""
+    result = await db.execute(
+        select(Article).where(Article.id == article_id).where(Article.user_id == current_user.id)
+    )
+    article = result.scalar_one_or_none()
+    if article is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="鏂囩珷涓嶅瓨鍦?")
+
+    article_content = ArticleContent(
+        title=article.title,
+        level=article.level,
+        source_book=article.source_book,
+        source_lesson=article.source_lesson,
+        vocabulary=[VocabularyWord(**item) for item in (article.vocabulary or [])],
+        content=[BilingualContent(**item) for item in (article.content or [])],
+        grammar=[GrammarPoint(**item) for item in (article.grammar or [])],
+        tips=[CultureTip(**item) for item in (article.tips or [])],
+        exercises=[Exercise(**item) for item in (article.exercises or [])],
+    )
+
+    try:
+        timeline = await tts_service.get_article_audio_timeline(article_content, article_id)
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="TTS 鏈嶅姟褰撳墠涓嶅彲鐢?",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"鏃堕棿杞存瀯寤哄け璐?: {exc}",
+        ) from exc
+
+    return ArticleAudioTimelineResponse.model_validate({"segments": timeline})
 
 
 @router.patch("/{article_id}/progress", response_model=ArticleResponse)

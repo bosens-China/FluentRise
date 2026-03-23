@@ -1,5 +1,5 @@
 """
-AI 对话与句子拆解 API
+AI 对话与句子拆解 API。
 """
 
 from __future__ import annotations
@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,7 +50,11 @@ class SentenceBreakdownRequest(BaseModel):
 def build_article_context(article: Article, paragraph_index: int | None = None) -> dict[str, Any]:
     """构造课文上下文。"""
     paragraph_context: dict[str, Any] = {}
-    if paragraph_index is not None and article.content and 0 <= paragraph_index < len(article.content):
+    if (
+        paragraph_index is not None
+        and article.content
+        and 0 <= paragraph_index < len(article.content)
+    ):
         paragraph = article.content[paragraph_index]
         paragraph_context = {
             "paragraph_en": paragraph.get("en"),
@@ -75,9 +80,7 @@ async def get_owned_article(
 ) -> Article:
     """读取当前用户自己的文章。"""
     result = await db.execute(
-        select(Article)
-        .where(Article.id == article_id)
-        .where(Article.user_id == user_id)
+        select(Article).where(Article.id == article_id).where(Article.user_id == user_id)
     )
     article = result.scalar_one_or_none()
     if article is None:
@@ -88,6 +91,26 @@ async def get_owned_article(
     return article
 
 
+async def resolve_article_context(
+    request: AIChatRequest,
+    db: AsyncSession,
+    current_user: UserInfo,
+) -> dict[str, Any] | None:
+    """解析课文上下文。"""
+    article_context: dict[str, Any] | None = None
+    if request.mode != "lesson":
+        return article_context
+
+    if request.article_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="课文对话模式需要 article_id",
+        )
+
+    article = await get_owned_article(db, article_id=request.article_id, user_id=current_user.id)
+    return build_article_context(article)
+
+
 @router.post("/respond", response_model=AIChatResponse, summary="获取 AI 对话回复")
 async def respond_ai_chat(
     request: AIChatRequest,
@@ -95,17 +118,7 @@ async def respond_ai_chat(
     current_user: UserInfo = Depends(get_current_user),
 ) -> Any:
     """根据课文上下文或通用问题返回 AI 回复。"""
-    article_context: dict[str, Any] | None = None
-
-    if request.mode == "lesson":
-        if request.article_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="课文对话模式需要 article_id",
-            )
-        article = await get_owned_article(db, article_id=request.article_id, user_id=current_user.id)
-        article_context = build_article_context(article)
-
+    article_context = await resolve_article_context(request, db, current_user)
     reply = await ai_chat_service.reply(
         mode=request.mode,
         message=request.message,
@@ -114,6 +127,32 @@ async def respond_ai_chat(
         article_context=article_context,
     )
     return AIChatResponse(reply=reply)
+
+
+@router.post("/respond/stream", summary="流式获取 AI 对话回复")
+async def respond_ai_chat_stream(
+    request: AIChatRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user),
+) -> StreamingResponse:
+    """流式返回 AI 回复。"""
+    article_context = await resolve_article_context(request, db, current_user)
+
+    async def event_stream():
+        async for chunk in ai_chat_service.stream_reply(
+            mode=request.mode,
+            message=request.message,
+            user_level=current_user.english_level,
+            learning_goals=current_user.learning_goals,
+            article_context=article_context,
+        ):
+            yield chunk
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @router.post(
@@ -130,7 +169,9 @@ async def get_sentence_breakdown(
     article_context: dict[str, Any] | None = None
 
     if request.article_id is not None:
-        article = await get_owned_article(db, article_id=request.article_id, user_id=current_user.id)
+        article = await get_owned_article(
+            db, article_id=request.article_id, user_id=current_user.id
+        )
         if request.paragraph_index is not None and (
             request.paragraph_index < 0 or request.paragraph_index >= len(article.content or [])
         ):
