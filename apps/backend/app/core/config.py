@@ -37,10 +37,27 @@ class Settings(BaseSettings):
     OPENAI_FAST_MODEL: str = "gpt-4o-mini"
     OPENAI_BASE_URL: str | None = None
 
+    TTS_DEFAULT_VOICE: str = "en-US-ChristopherNeural"
+
     DASHSCOPE_API_KEY: str = ""
-    DASHSCOPE_REALTIME_MODEL: str = "qwen3-asr-flash-realtime-2026-02-10"
+    DASHSCOPE_ASR_MODEL: str = "qwen3-asr-flash-2026-02-10"
+    SPEECH_PROVIDER: str = "dashscope"
+    SPEECH_DEFAULT_LANGUAGE: str = "en"
     SPEECH_TARGET_DURATION_SECONDS: int = 60
     SPEECH_HARD_MAX_DURATION_SECONDS: int = 65
+    SPEECH_READING_PASS_SCORE: int = 65
+    SPEECH_MAX_ATTEMPTS: int = 3
+    SPEECH_ACCEPTED_CONTENT_TYPES: tuple[str, ...] = (
+        "audio/wav",
+        "audio/x-wav",
+        "audio/wave",
+    )
+    SPEECH_SUPPORTED_AUDIO_FORMATS: tuple[str, ...] = ("wav",)
+    ARTICLE_LISTEN_REQUIRED_COUNT: int = 5
+    REVIEW_TOTAL_STAGES: int = 9
+    REVIEW_STAGE_INTERVALS_DAYS: tuple[int, ...] = (1, 2, 3, 5, 7, 14, 30, 60, 90)
+    PLAYGROUND_HISTORY_PAGE_SIZE: int = 8
+    PLAYGROUND_MAX_ATTEMPTS: int = 3
 
     SMS_CODE_EXPIRE_SECONDS: int = 300
     SMS_CODE_LENGTH: int = 6

@@ -5,12 +5,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from enum import IntEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.config import settings
 from app.core.time import app_today
 from app.db.database import Base
 
@@ -19,27 +19,14 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 
-class ReviewStage(IntEnum):
-    """复习阶段。"""
-
-    STAGE_1 = 1
-    STAGE_2 = 2
-    STAGE_3 = 3
-    STAGE_4 = 4
-    STAGE_5 = 5
-    STAGE_6 = 6
-    STAGE_7 = 7
-    STAGE_8 = 8
-    STAGE_9 = 9
-    COMPLETED = 10
-
-
-REVIEW_INTERVALS = [1, 2, 3, 5, 7, 14, 30, 60, 90]
+REVIEW_INTERVALS = list(settings.REVIEW_STAGE_INTERVALS_DAYS)
+REVIEW_TOTAL_STAGES = settings.REVIEW_TOTAL_STAGES
+REVIEW_COMPLETED_STAGE = REVIEW_TOTAL_STAGES + 1
 
 
 def get_next_review_date(initial_completed_at: datetime, stage: int) -> datetime:
     """根据阶段计算下次复习时间。"""
-    if stage >= ReviewStage.COMPLETED:
+    if stage >= REVIEW_COMPLETED_STAGE:
         return initial_completed_at + timedelta(days=365 * 100)
     return initial_completed_at + timedelta(days=REVIEW_INTERVALS[stage - 1])
 
@@ -102,9 +89,9 @@ class ReviewSchedule(Base):
 
     def get_stage_label(self) -> str:
         """返回阶段文案。"""
-        if self.current_stage >= ReviewStage.COMPLETED:
+        if self.current_stage >= REVIEW_COMPLETED_STAGE:
             return "已完成"
-        return f"第 {self.current_stage}/9 轮"
+        return f"第 {self.current_stage}/{REVIEW_TOTAL_STAGES} 轮"
 
     def get_days_until_next(self) -> int:
         """返回距离下次复习的天数。"""

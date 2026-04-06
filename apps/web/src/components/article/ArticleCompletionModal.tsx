@@ -7,6 +7,7 @@ import { useRequest } from 'ahooks';
 import type { Article, ExerciseResultItem } from '@/api/article';
 import { generateArticleMiniStory, evaluateArticleMiniStory } from '@/api/article';
 import type { SpeechAnalyzeResponse } from '@/api/speech';
+import { useSystemConfig } from '@/hooks/useSystemConfig';
 
 import {
   EMPTY_EXERCISES,
@@ -17,7 +18,6 @@ import { CompletionExerciseStep } from './CompletionExerciseStep';
 import { CompletionReadingStep } from './CompletionReadingStep';
 import { CompletionStoryStep } from './CompletionStoryStep';
 
-const READING_PASS_SCORE = 65;
 const AUTO_CHECK_DELAY_MS = 550;
 
 interface ArticleCompletionModalProps {
@@ -35,13 +35,16 @@ interface ArticleCompletionModalProps {
 
 type CompletionTabKey = 'exercise' | 'reading' | 'story';
 
-function isReadingPassed(result: SpeechAnalyzeResponse | null): boolean {
+function isReadingPassed(
+  result: SpeechAnalyzeResponse | null,
+  readingPassScore: number,
+): boolean {
   if (!result) {
     return false;
   }
   return (
     result.confidence_level !== 'low' &&
-    (result.similarity_score ?? 0) >= READING_PASS_SCORE
+    (result.similarity_score ?? 0) >= readingPassScore
   );
 }
 
@@ -58,8 +61,12 @@ export function ArticleCompletionModal({
   onComplete,
 }: ArticleCompletionModalProps) {
   const { message } = App.useApp();
+  const { data: systemConfig } = useSystemConfig();
   const [manualActiveTab, setManualActiveTab] = useState<CompletionTabKey | null>(null);
   const [speechResult, setSpeechResult] = useState<SpeechAnalyzeResponse | null>(null);
+  const speechConfig = systemConfig?.speech;
+  const readingPassScore = speechConfig?.reading_pass_score ?? 65;
+  const maxAttempts = speechConfig?.max_attempts ?? 3;
   
   // Attempts tracking
   const [readingAttempts, setReadingAttempts] = useState(0);
@@ -86,11 +93,11 @@ export function ArticleCompletionModal({
     return totalCount === exercises.length && correctCount === exercises.length;
   }, [exerciseSummary?.correct, exerciseSummary?.total, exercises.length]);
 
-  const readingPassed = isReadingPassed(speechResult);
-  const readingSoftFailed = !readingPassed && readingAttempts >= 3;
+  const readingPassed = isReadingPassed(speechResult, readingPassScore);
+  const readingSoftFailed = !readingPassed && readingAttempts >= maxAttempts;
   const readingCompleted = readingPassed || readingSoftFailed;
 
-  const storySoftFailed = !storyPassed && storyAttempts >= 3;
+  const storySoftFailed = !storyPassed && storyAttempts >= maxAttempts;
   const storyCompleted = storyPassed || storySoftFailed;
 
   const preferredTab = useMemo<CompletionTabKey>(() => {
@@ -300,6 +307,8 @@ export function ArticleCompletionModal({
                   readingCompleted={readingCompleted}
                   readingPassed={readingPassed}
                   readingAttempts={readingAttempts}
+                  readingPassScore={readingPassScore}
+                  maxAttempts={maxAttempts}
                   handleSpeechResult={handleSpeechResult}
                 />
               ),
@@ -318,6 +327,7 @@ export function ArticleCompletionModal({
                   storyCompleted={storyCompleted}
                   storyPassed={storyPassed}
                   storyAttempts={storyAttempts}
+                  maxAttempts={maxAttempts}
                   storyLoading={storyLoading}
                   miniStory={miniStory}
                   storyFeedback={storyFeedback}

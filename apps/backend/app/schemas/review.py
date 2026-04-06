@@ -8,6 +8,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
+
 
 class ReviewItem(BaseModel):
     """复习条目。"""
@@ -102,6 +104,6 @@ class ArticleReviewStatus(BaseModel):
     is_in_review: bool = Field(..., description="是否处于复习计划中")
     schedule_id: int | None = Field(None, description="复习计划 ID")
     current_stage: int | None = Field(None, description="当前阶段")
-    total_stages: int = Field(7, description="总阶段数")
+    total_stages: int = Field(settings.REVIEW_TOTAL_STAGES, description="总阶段数")
     next_review_date: datetime | None = Field(None, description="下次复习时间")
     completed: bool = Field(..., description="是否已完成全部复习")

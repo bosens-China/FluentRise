@@ -7,16 +7,17 @@ import {
   type PracticeSession,
   type PracticeStats,
 } from '@/api/playground';
+import { useSystemConfig } from '@/hooks/useSystemConfig';
 import { toast } from '@/lib/toast';
 
-const HISTORY_PAGE_SIZE = 8;
-
 export function usePlaygroundInsights() {
+  const { data: systemConfig } = useSystemConfig();
   const [showInsightsDrawer, setShowInsightsDrawer] = useState(false);
   const [practiceHistory, setPracticeHistory] = useState<PracticeSession[]>([]);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const historyPageSize = systemConfig?.playground.history_page_size ?? 8;
 
   const statsRequest = useRequest(getPracticeStats, {
     manual: true,
@@ -26,7 +27,7 @@ export function usePlaygroundInsights() {
   });
 
   const historyRequest = useRequest(
-    async (page: number) => getPracticeHistory(page, HISTORY_PAGE_SIZE),
+    async (page: number) => getPracticeHistory(page, historyPageSize),
     {
       manual: true,
       onError: (error) => {

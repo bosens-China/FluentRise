@@ -16,10 +16,12 @@ import {
 import { Button, Card, Empty } from '@/components/ui';
 import { useMutation } from '@/hooks/useData';
 import { useSpeechRecorder } from '@/hooks/useSpeechRecorder';
+import { useSystemConfig } from '@/hooks/useSystemConfig';
 
 const { Paragraph, Text, Title } = Typography;
 
-const TARGET_DURATION_SECONDS = 60;
+const FALLBACK_TARGET_DURATION_SECONDS = 60;
+const FALLBACK_LANGUAGE = 'en';
 
 const confidenceLabelMap: Record<SpeechConfidenceLevel, string> = {
   high: '稳定',
@@ -45,8 +47,15 @@ export function SpeechPracticePanel({
   onResultChange,
 }: SpeechPracticePanelProps) {
   const { message } = App.useApp();
+  const { data: systemConfig } = useSystemConfig();
   const [result, setResult] = useState<SpeechAnalyzeResponse | null>(null);
   const submittedKeyRef = useRef<string | null>(null);
+
+  const speechConfig = systemConfig?.speech;
+  const targetDurationSeconds =
+    speechConfig?.target_duration_seconds ?? FALLBACK_TARGET_DURATION_SECONDS;
+  const defaultLanguage = speechConfig?.default_language ?? FALLBACK_LANGUAGE;
+
   const referenceText = useMemo(
     () => article.content.map((item) => item.en).join(' '),
     [article.content],
@@ -61,7 +70,7 @@ export function SpeechPracticePanel({
     stopRecording,
     resetRecording,
   } = useSpeechRecorder({
-    maxDurationSeconds: TARGET_DURATION_SECONDS,
+    maxDurationSeconds: targetDurationSeconds,
   });
 
   const analyzeRequest = useMutation(analyzeSpeech, {
@@ -97,16 +106,18 @@ export function SpeechPracticePanel({
     submittedKeyRef.current = currentKey;
     void analyzeRequest.run({
       file: recordedFile,
-      language: 'en',
+      language: defaultLanguage,
       referenceText,
     });
-  }, [analyzeRequest, recordedFile, referenceText, status]);
+  }, [analyzeRequest, defaultLanguage, recordedFile, referenceText, status]);
 
   useEffect(() => {
     if (status === 'recording' && remainingSeconds === 0) {
-      message.warning('已到 60 秒建议上限，录音已自动停止并开始解析');
+      message.warning(
+        `已到 ${targetDurationSeconds} 秒建议上限，录音已自动停止并开始解析`,
+      );
     }
-  }, [message, remainingSeconds, status]);
+  }, [message, remainingSeconds, status, targetDurationSeconds]);
 
   const handleStart = async () => {
     setResult(null);
@@ -120,8 +131,7 @@ export function SpeechPracticePanel({
   };
 
   const progressPercent = Math.round(
-    ((TARGET_DURATION_SECONDS - remainingSeconds) / TARGET_DURATION_SECONDS) *
-      100,
+    ((targetDurationSeconds - remainingSeconds) / targetDurationSeconds) * 100,
   );
 
   return (
@@ -130,7 +140,7 @@ export function SpeechPracticePanel({
         type="info"
         showIcon
         message="录音规则"
-        description="建议单次录音控制在 60 秒内。系统会在 60 秒自动停止并开始解析，结果更适合做课文跟读回看，不等同于严格发音纠错。"
+        description={`建议单次录音控制在 ${targetDurationSeconds} 秒内。系统会在达到建议上限后自动停止并开始解析，结果更适合做课文跟读回看，不等同于严格发音纠错。`}
       />
 
       {variant === 'completion' ? (

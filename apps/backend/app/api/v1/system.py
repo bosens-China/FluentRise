@@ -1,5 +1,5 @@
 """
-系统相关 API
+系统相关 API。
 """
 
 from __future__ import annotations
@@ -8,25 +8,14 @@ import random
 from typing import Any
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
 
 from app.api.deps import CurrentUser, DbSession
+from app.schemas.system import EncouragementRequest, Quote, SystemConfigResponse
 from app.services.encouragement_service import EncouragementResult, encouragement_service
 from app.services.study_log_service import study_log_service
+from app.services.system_config_service import system_config_service
 
 router = APIRouter(prefix="/system", tags=["系统"])
-
-
-class Quote(BaseModel):
-    en: str
-    zh: str
-
-
-class EncouragementRequest(BaseModel):
-    context_type: str = Field(..., description="场景类型：lesson/review/playground")
-    title: str | None = Field(None, description="课程标题")
-    accuracy: float | None = Field(None, description="正确率")
-    streak_days: int | None = Field(None, description="连续打卡天数")
 
 
 ENCOURAGING_QUOTES = [
@@ -54,6 +43,12 @@ ENCOURAGING_QUOTES = [
         "zh": "按自己的节奏来也很好，这样的前进同样算数。",
     },
 ]
+
+
+@router.get("/config", response_model=SystemConfigResponse, summary="获取系统能力配置")
+async def get_system_config() -> SystemConfigResponse:
+    """返回前端可消费的系统能力与限制配置。"""
+    return system_config_service.get_config()
 
 
 @router.get("/quotes", response_model=list[Quote], summary="获取鼓励语录")

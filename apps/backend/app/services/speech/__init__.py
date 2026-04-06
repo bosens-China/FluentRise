@@ -3,14 +3,14 @@
 """
 
 from .audio_preprocessor import PreparedAudio, prepare_audio
+from .file_transcription_client import DashScopeFileTranscriptionClient
 from .reading_feedback import ConfidenceLevel, ReadingFeedback, build_reading_feedback
-from .realtime_client import DashScopeRealtimeClient
 
 __all__ = [
     "PreparedAudio",
     "prepare_audio",
+    "DashScopeFileTranscriptionClient",
     "ConfidenceLevel",
     "ReadingFeedback",
     "build_reading_feedback",
-    "DashScopeRealtimeClient",
 ]

@@ -6,6 +6,7 @@ import {
 import { Button, Card, Input, Tag, Typography } from 'antd';
 
 import type { Question } from '@/api/playground';
+import { useSystemConfig } from '@/hooks/useSystemConfig';
 import { QUESTION_TYPE_LABEL_MAP, type QuestionState } from '@/lib/playground';
 
 const { Paragraph, Text, Title } = Typography;
@@ -29,6 +30,10 @@ export function PlaygroundQuestionCard({
   onShowAnswer,
   onPlayAudio,
 }: PlaygroundQuestionCardProps) {
+  const { data: systemConfig } = useSystemConfig();
+  const maxAttempts = systemConfig?.playground.max_attempts ?? 3;
+  const remainingAttempts = Math.max(0, maxAttempts - (state?.attempts || 0));
+
   return (
     <Card className="rounded-[32px] border-0 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
       <div className="mb-4 flex justify-center">
@@ -164,9 +169,9 @@ export function PlaygroundQuestionCard({
 
         {state?.isCorrect === false &&
         !state.showedAnswer &&
-        state.attempts < 3 ? (
+        (state.attempts || 0) < maxAttempts ? (
           <div className="mt-4 text-center text-red-500">
-            还可以再试 {3 - state.attempts} 次，提示：{question.hint}
+            还可以再试 {remainingAttempts} 次，提示：{question.hint}
           </div>
         ) : null}
 

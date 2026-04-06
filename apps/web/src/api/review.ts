@@ -1,5 +1,5 @@
 /**
- * 复习模块 API
+ * 复习模块 API。
  */
 import request from '@/utils/request';
 
@@ -91,11 +91,15 @@ export async function getReviewStats(): Promise<ReviewStats> {
   return request.get('/reviews/stats');
 }
 
-export async function getArticleReviewStatus(articleId: number): Promise<ArticleReviewStatus> {
+export async function getArticleReviewStatus(
+  articleId: number,
+): Promise<ArticleReviewStatus> {
   return request.get(`/reviews/article/${articleId}/status`);
 }
 
-export async function getReviewLogs(scheduleId: number): Promise<ReviewLogListResponse> {
+export async function getReviewLogs(
+  scheduleId: number,
+): Promise<ReviewLogListResponse> {
   return request.get(`/reviews/${scheduleId}/logs`);
 }
 
@@ -106,25 +110,45 @@ export async function submitReview(
   return request.post(`/reviews/${scheduleId}/submit`, data);
 }
 
-export function getStageLabel(stage: number): string {
-  if (stage >= 10) return '已完成';
-  return `第 ${stage}/9 轮`;
+export function getStageLabel(stage: number, totalStages: number): string {
+  if (stage > totalStages) {
+    return '已完成';
+  }
+  return `第 ${stage}/${totalStages} 轮`;
 }
 
-export function getStageInterval(stage: number): string {
-  const intervals = [1, 2, 3, 5, 7, 14, 30, 60, 90];
-  if (stage < 1 || stage > 9) return '';
-  return `${intervals[stage - 1]}天后`;
+export function getStageInterval(
+  stage: number,
+  stageIntervalsDays: number[],
+): string {
+  if (stage < 1 || stage > stageIntervalsDays.length) {
+    return '';
+  }
+  return `${stageIntervalsDays[stage - 1]}天后`;
 }
 
 export function formatReviewDueText(daysUntilNext: number): string {
-  if (daysUntilNext < 0) return `已逾期 ${Math.abs(daysUntilNext)} 天`;
-  if (daysUntilNext === 0) return '今天复习';
+  if (daysUntilNext < 0) {
+    return `已逾期 ${Math.abs(daysUntilNext)} 天`;
+  }
+  if (daysUntilNext === 0) {
+    return '今天复习';
+  }
   return `${daysUntilNext}天后`;
 }
 
-export function getReviewProgress(currentStage: number | null): number {
-  if (!currentStage || currentStage < 1) return 0;
-  if (currentStage >= 10) return 100;
-  return Math.round(((currentStage - 1) / 9) * 100);
+export function getReviewProgress(
+  currentStage: number | null,
+  totalStages: number,
+): number {
+  if (!currentStage || currentStage < 1) {
+    return 0;
+  }
+  if (currentStage > totalStages) {
+    return 100;
+  }
+  if (totalStages <= 1) {
+    return 100;
+  }
+  return Math.round(((currentStage - 1) / totalStages) * 100);
 }

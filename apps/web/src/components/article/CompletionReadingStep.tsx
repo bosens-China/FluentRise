@@ -1,15 +1,17 @@
 import { Alert } from 'antd';
+
 import type { Article } from '@/api/article';
 import type { SpeechAnalyzeResponse } from '@/api/speech';
-import { SpeechPracticePanel } from './SpeechPracticePanel';
 
-const READING_PASS_SCORE = 65;
+import { SpeechPracticePanel } from './SpeechPracticePanel';
 
 interface CompletionReadingStepProps {
   article: Article;
   readingCompleted: boolean;
   readingPassed: boolean;
   readingAttempts: number;
+  readingPassScore: number;
+  maxAttempts: number;
   handleSpeechResult: (result: SpeechAnalyzeResponse | null) => void;
 }
 
@@ -18,6 +20,8 @@ export function CompletionReadingStep({
   readingCompleted,
   readingPassed,
   readingAttempts,
+  readingPassScore,
+  maxAttempts,
   handleSpeechResult,
 }: CompletionReadingStepProps) {
   return (
@@ -25,11 +29,19 @@ export function CompletionReadingStep({
       <Alert
         type={readingCompleted ? (readingPassed ? 'success' : 'warning') : 'info'}
         showIcon
-        message={readingCompleted ? (readingPassed ? '朗读已通过 · 66%' : '已进入下一环节 (重试耗尽)') : '朗读通过线'}
+        message={
+          readingCompleted
+            ? readingPassed
+              ? '朗读已通过 · 66%'
+              : '已进入下一环节（重试耗尽）'
+            : '朗读通过检查'
+        }
         description={
           readingCompleted
-            ? (readingPassed ? '朗读校验已通过，请继续完成小故事概述。' : '已经尽力了，系统会标记这篇文章明天再次学习。请继续完成最后一步。')
-            : `建议至少达到 ${READING_PASS_SCORE}% 内容覆盖度，且识别稳定度不能是“偏低”。连续失败 3 次会自动进入下一步，但明日需重学。当前尝试：${readingAttempts}/3`
+            ? readingPassed
+              ? '朗读校验已通过，请继续完成小故事概述。'
+              : '已经尽力了，系统会标记这篇文章明天再次学习。请继续完成最后一步。'
+            : `建议至少达到 ${readingPassScore}% 内容覆盖度，且识别稳定度不能是“偏低”。连续失败 ${maxAttempts} 次会自动进入下一步，但明日需重学。当前尝试：${readingAttempts}/${maxAttempts}`
         }
       />
       <SpeechPracticePanel

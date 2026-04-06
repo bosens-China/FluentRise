@@ -1,5 +1,5 @@
 """
-朗读解析 API
+朗读解析 API。
 """
 
 from __future__ import annotations
@@ -20,16 +20,17 @@ router = APIRouter(prefix="/speech", tags=["朗读解析"])
 async def analyze_speech(
     current_user: CurrentUser,
     file: UploadFile = File(...),
-    language: str = Form(default="en"),
+    language: str = Form(default=settings.SPEECH_DEFAULT_LANGUAGE),
     reference_text: str | None = Form(default=None),
 ) -> Any:
-    """上传录音并返回识别与宽松反馈"""
+    """上传录音并返回识别与宽松反馈。"""
     del current_user
 
-    if file.content_type not in {"audio/wav", "audio/x-wav", "audio/wave"}:
+    if file.content_type not in settings.SPEECH_ACCEPTED_CONTENT_TYPES:
+        accepted_types = ", ".join(settings.SPEECH_ACCEPTED_CONTENT_TYPES)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="当前仅支持 WAV 录音文件，请重新录制后再试",
+            detail=f"当前仅支持这些音频类型：{accepted_types}",
         )
 
     audio_bytes = await file.read()

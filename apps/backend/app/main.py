@@ -17,6 +17,7 @@ from app.core.exceptions import AppError
 from app.core.rate_limit import init_rate_limiters
 from app.db.database import check_db_connection, close_db_connection
 from app.db.redis import close_redis, get_redis, init_redis
+from app.services.system_config_service import system_config_service
 
 
 class ConsoleStyle:
@@ -37,11 +38,7 @@ def console_banner(label: str, message: str, color: str) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """
-    应用生命周期管理。
-
-    启动时初始化 Redis、限流器和数据库连接；关闭时释放资源。
-    """
+    """应用生命周期管理。"""
     del app
 
     console_banner("[START]", "正在初始化应用...", ConsoleStyle.cyan)
@@ -54,6 +51,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     await check_db_connection()
     console_banner("[DB]", "数据库连接检查完成", ConsoleStyle.magenta)
+
+    for line in system_config_service.build_startup_lines():
+        console_banner("[CFG]", line, ConsoleStyle.cyan)
 
     console_banner("[OK]", f"{settings.APP_NAME} 启动成功", ConsoleStyle.green)
     console_banner("[DOCS]", "API 文档: http://localhost:8000/docs", ConsoleStyle.cyan)
@@ -87,7 +87,7 @@ app.add_middleware(
 
 @app.exception_handler(AppError)
 async def handle_app_error(_request: Request, exc: AppError) -> JSONResponse:
-    """统一处理业务异常，避免 service 层依赖 FastAPI 的 HTTPException。"""
+    """统一处理业务异常。"""
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 

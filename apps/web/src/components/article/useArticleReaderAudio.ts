@@ -3,8 +3,17 @@ import { message } from 'antd';
 
 import type { Article, ArticleAudioTimelineResponse } from '@/api/article';
 import { getArticleAudioTimeline } from '@/api/article';
+import { getConfiguredTextAudioUrl } from '@/api/tts';
+import { useSystemConfig } from '@/hooks/useSystemConfig';
 
-function buildParagraphAudioUrl(text: string, speaker?: string): string {
+function buildParagraphAudioUrl(
+  text: string,
+  defaultVoice?: string,
+  speaker?: string,
+): string {
+  if (!speaker) {
+    return getConfiguredTextAudioUrl(text, defaultVoice);
+  }
   const params = new URLSearchParams({ word: text });
   if (speaker) {
     params.set('speaker', speaker);
@@ -19,6 +28,7 @@ interface UseArticleReaderAudioOptions {
 export function useArticleReaderAudio({
   article,
 }: UseArticleReaderAudioOptions) {
+  const { data: systemConfig } = useSystemConfig();
   const [audioTimeline, setAudioTimeline] =
     useState<ArticleAudioTimelineResponse | null>(null);
   const [loadingAudio, setLoadingAudio] = useState(false);
@@ -31,6 +41,7 @@ export function useArticleReaderAudio({
   const singleAudioCache = useRef<Record<string, HTMLAudioElement>>({});
   const currentAudioUrlRef = useRef<string | null>(null);
   const isAdvancingSegmentRef = useRef(false);
+  const defaultVoice = systemConfig?.tts.default_voice;
 
   useEffect(() => {
     setLoadingTTSKey(null);
@@ -63,7 +74,7 @@ export function useArticleReaderAudio({
       return;
     }
 
-    const audio = new Audio(buildParagraphAudioUrl(text, speaker));
+    const audio = new Audio(buildParagraphAudioUrl(text, defaultVoice, speaker));
     singleAudioCache.current[cacheKey] = audio;
 
     try {
@@ -73,7 +84,7 @@ export function useArticleReaderAudio({
     } finally {
       setLoadingTTSKey((current) => (current === text ? null : current));
     }
-  }, []);
+  }, [defaultVoice]);
 
   const ensureAudioTimeline = useCallback(async () => {
     if (audioTimeline) {
@@ -100,7 +111,11 @@ export function useArticleReaderAudio({
         return;
       }
 
-      const nextUrl = buildParagraphAudioUrl(paragraph.en, paragraph.speaker);
+      const nextUrl = buildParagraphAudioUrl(
+        paragraph.en,
+        defaultVoice,
+        paragraph.speaker,
+      );
       if (currentAudioUrlRef.current !== nextUrl) {
         currentAudioUrlRef.current = nextUrl;
         audioElement.src = nextUrl;
@@ -114,7 +129,7 @@ export function useArticleReaderAudio({
       await audioElement.play();
       setIsPlaying(true);
     },
-    [article.content],
+    [article.content, defaultVoice],
   );
 
   const toggleAudio = useCallback(async () => {

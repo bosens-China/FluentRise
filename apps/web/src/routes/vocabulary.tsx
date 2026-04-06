@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { BookOpen, Volume2, VolumeX } from 'lucide-react';
 
-import { getWordAudioUrl } from '@/api/tts';
+import { getConfiguredWordAudioUrl } from '@/api/tts';
 import { getVocabularyTimeline } from '@/api/vocabulary';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { AuthGuard } from '@/components/providers';
 import { Badge, Button, Card, Empty, LoadingSpinner } from '@/components/ui';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 import { useQuery } from '@/hooks/useData';
+import { useSystemConfig } from '@/hooks/useSystemConfig';
 import { formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/vocabulary')({
@@ -17,8 +18,10 @@ export const Route = createFileRoute('/vocabulary')({
 
 function VocabularyPage() {
   const { data, loading } = useQuery(getVocabularyTimeline);
+  const { data: systemConfig } = useSystemConfig();
   const { play: playAudioFile, stop: stopAudioPlayback } = useAudioPlayer();
   const [playingWordId, setPlayingWordId] = useState<number | null>(null);
+  const defaultVoice = systemConfig?.tts.default_voice;
 
   const playWordAudio = (wordId: number, word: string) => {
     if (playingWordId === wordId) {
@@ -28,7 +31,7 @@ function VocabularyPage() {
     }
 
     setPlayingWordId(wordId);
-    void playAudioFile(getWordAudioUrl(word), {
+    void playAudioFile(getConfiguredWordAudioUrl(word, defaultVoice), {
       onEnded: () => setPlayingWordId(null),
       onError: () => setPlayingWordId(null),
     });

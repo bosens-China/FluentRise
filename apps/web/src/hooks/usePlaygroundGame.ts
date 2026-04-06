@@ -22,6 +22,7 @@ import {
   type PlaygroundSubmitResult,
 } from '@/lib/playground';
 import { toast } from '@/lib/toast';
+import { useSystemConfig } from '@/hooks/useSystemConfig';
 
 interface UsePlaygroundGameOptions {
   onPracticeSubmitted?: () => void;
@@ -31,6 +32,7 @@ const PREPARE_AUDIO_DELAY = 450;
 
 export function usePlaygroundGame(options: UsePlaygroundGameOptions = {}) {
   const { onPracticeSubmitted } = options;
+  const { data: systemConfig } = useSystemConfig();
   const {
     play: playAudioFile,
     stop: stopAudioPlayback,
@@ -44,6 +46,7 @@ export function usePlaygroundGame(options: UsePlaygroundGameOptions = {}) {
   const [submitResult, setSubmitResult] =
     useState<PlaygroundSubmitResult | null>(null);
   const [gameState, setGameState] = useState(createInitialGameState);
+  const maxAttempts = systemConfig?.playground.max_attempts ?? 3;
 
   const currentQuestion = gameState.questions[gameState.currentIndex];
   const currentState = currentQuestion
@@ -264,7 +267,7 @@ export function usePlaygroundGame(options: UsePlaygroundGameOptions = {}) {
       ...currentState,
       attempts,
       isCorrect,
-      showedAnswer: !isCorrect && attempts >= 3,
+      showedAnswer: !isCorrect && attempts >= maxAttempts,
     });
 
     const nextGameState: GameState = {
@@ -278,10 +281,10 @@ export function usePlaygroundGame(options: UsePlaygroundGameOptions = {}) {
 
     setGameState(nextGameState);
 
-    if (isCorrect || attempts >= 3) {
+    if (isCorrect || attempts >= maxAttempts) {
       schedule(() => submitOrAdvance(nextGameState), isCorrect ? 700 : 1400);
     }
-  }, [currentQuestion, currentState, gameState, schedule, submitOrAdvance]);
+  }, [currentQuestion, currentState, gameState, maxAttempts, schedule, submitOrAdvance]);
 
   const handleShowAnswer = useCallback(() => {
     if (!currentQuestion || !currentState) {

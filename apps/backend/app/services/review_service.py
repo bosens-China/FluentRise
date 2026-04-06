@@ -10,7 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.time import app_day_bounds, app_timezone, app_today, utc_now
-from app.models.review_schedule import ReviewLog, ReviewSchedule, get_next_review_date
+from app.models.review_schedule import (
+    REVIEW_COMPLETED_STAGE,
+    REVIEW_TOTAL_STAGES,
+    ReviewLog,
+    ReviewSchedule,
+    get_next_review_date,
+)
 from app.repositories.review_repository import (
     count_due_review_schedules,
     count_overdue_review_schedules,
@@ -88,7 +94,7 @@ class ReviewService:
         article_id: int,
     ) -> bool:
         schedule = await get_user_schedule_by_article(db, user_id=user_id, article_id=article_id)
-        return schedule is not None and schedule.current_stage < 8
+        return schedule is not None and schedule.current_stage < REVIEW_COMPLETED_STAGE
 
     @staticmethod
     async def get_today_review_summary(db: AsyncSession, user_id: int) -> TodayReviewSummary:
@@ -181,7 +187,7 @@ class ReviewService:
                 schedule_id=None,
                 current_stage=None,
                 completed=False,
-                total_stages=9,
+                total_stages=REVIEW_TOTAL_STAGES,
                 next_review_date=None,
             )
 
@@ -189,9 +195,13 @@ class ReviewService:
             is_in_review=True,
             schedule_id=schedule.id,
             current_stage=schedule.current_stage,
-            total_stages=9,
-            next_review_date=schedule.next_review_date if schedule.current_stage < 10 else None,
-            completed=schedule.current_stage >= 10,
+            total_stages=REVIEW_TOTAL_STAGES,
+            next_review_date=(
+                schedule.next_review_date
+                if schedule.current_stage < REVIEW_COMPLETED_STAGE
+                else None
+            ),
+            completed=schedule.current_stage >= REVIEW_COMPLETED_STAGE,
         )
 
     @staticmethod
@@ -216,7 +226,7 @@ class ReviewService:
         request: SubmitReviewRequest,
     ) -> SubmitReviewResponse:
         schedule = await ReviewService._get_user_schedule(db, user_id, schedule_id)
-        if schedule.current_stage >= 10:
+        if schedule.current_stage >= REVIEW_COMPLETED_STAGE:
             raise BadRequestError("该复习计划已完成")
 
         log = ReviewLog(
@@ -236,12 +246,18 @@ class ReviewService:
         schedule.last_reviewed_at = utc_now()
         schedule.self_assessment = request.quality_assessment
 
-        if next_stage > 9:
-            schedule.current_stage = 10
-            schedule.next_review_date = get_next_review_date(schedule.initial_completed_at, 100)
+        if next_stage > REVIEW_TOTAL_STAGES:
+            schedule.current_stage = REVIEW_COMPLETED_STAGE
+            schedule.next_review_date = get_next_review_date(
+                schedule.initial_completed_at,
+                REVIEW_COMPLETED_STAGE,
+            )
             completed = True
             next_review_date = None
-            message = "恭喜，你已经完成全部 9 轮复习，这篇内容已经掌握得很稳了。"
+            message = (
+                f"恭喜，你已经完成全部 {REVIEW_TOTAL_STAGES} 轮复习，"
+                "这篇内容已经掌握得很稳了。"
+            )
         else:
             schedule.current_stage = next_stage
             schedule.next_review_date = get_next_review_date(

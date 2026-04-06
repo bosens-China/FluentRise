@@ -32,13 +32,17 @@ import {
   Tabs,
 } from '@/components/ui';
 import { useQuery } from '@/hooks/useData';
+import { useSystemConfig } from '@/hooks/useSystemConfig';
 import { formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/review')({
   component: ReviewPage,
 });
 
-const stageBadgeToneMap: Record<number, 'default' | 'secondary' | 'accent' | 'success'> = {
+const stageBadgeToneMap: Record<
+  number,
+  'default' | 'secondary' | 'accent' | 'success'
+> = {
   1: 'default',
   2: 'secondary',
   3: 'secondary',
@@ -48,7 +52,10 @@ const stageBadgeToneMap: Record<number, 'default' | 'secondary' | 'accent' | 'su
   7: 'success',
 };
 
-const stageProgressToneMap: Record<number, 'primary' | 'secondary' | 'accent' | 'success'> = {
+const stageProgressToneMap: Record<
+  number,
+  'primary' | 'secondary' | 'accent' | 'success'
+> = {
   1: 'primary',
   2: 'secondary',
   3: 'secondary',
@@ -60,14 +67,18 @@ const stageProgressToneMap: Record<number, 'primary' | 'secondary' | 'accent' | 
 
 function ReviewPage() {
   const navigate = useNavigate();
+  const { data: systemConfig } = useSystemConfig();
   const [activeTab, setActiveTab] = useState('today');
   const [historyPage, setHistoryPage] = useState(1);
   const [selectedReview, setSelectedReview] = useState<ReviewItem | null>(null);
 
+  const reviewTotalStages = systemConfig?.review.total_stages ?? 9;
+  const historyPageSize = systemConfig?.playground.history_page_size ?? 8;
+
   const { data: todayData, loading: todayLoading } = useQuery(getTodayReviews);
   const { data: stats } = useQuery(getReviewStats);
   const { data: historyData, loading: historyLoading } = useQuery(
-    () => getArticleHistory(historyPage, 12),
+    () => getArticleHistory(historyPage, historyPageSize),
     { ready: activeTab === 'history' },
   );
 
@@ -150,14 +161,16 @@ function ReviewPage() {
     return (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => {
-          const progress = getReviewProgress(item.stage);
+          const progress = getReviewProgress(item.stage, reviewTotalStages);
           const badgeTone = stageBadgeToneMap[item.stage] || 'default';
           const progressTone = stageProgressToneMap[item.stage] || 'primary';
 
           return (
             <Card key={item.schedule_id} className="p-5">
               <div className="mb-4 flex items-start justify-between gap-4">
-                <Badge variant={badgeTone}>第 {item.stage}/7 轮</Badge>
+                <Badge variant={badgeTone}>
+                  第 {item.stage}/{reviewTotalStages} 轮
+                </Badge>
                 <CircularProgress
                   value={progress}
                   size={52}
@@ -189,7 +202,11 @@ function ReviewPage() {
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
                 <Badge variant="outline">Level {item.level}</Badge>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setSelectedReview(item)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedReview(item)}
+                  >
                     查看记录
                   </Button>
                   <Button size="sm" onClick={() => startReview(item)}>
@@ -224,7 +241,9 @@ function ReviewPage() {
       );
     }
 
-    const hasNextPage = historyData ? historyPage * 12 < historyData.total : false;
+    const hasNextPage = historyData
+      ? historyPage * historyPageSize < historyData.total
+      : false;
 
     return (
       <>
@@ -266,7 +285,7 @@ function ReviewPage() {
           ))}
         </div>
 
-        {historyData && historyData.total > 12 ? (
+        {historyData && historyData.total > historyPageSize ? (
           <div className="mt-8 flex justify-center gap-3">
             <Button
               variant="outline"
@@ -325,7 +344,9 @@ function ReviewPage() {
             <RotateCcw className="h-7 w-7" />
           </div>
           <div>
-            <h1 className="text-2xl font-black text-[var(--text-primary)]">复习中心</h1>
+            <h1 className="text-2xl font-black text-[var(--text-primary)]">
+              复习中心
+            </h1>
             <p className="text-sm text-[var(--text-secondary)]">
               按节奏稳步回顾，让已经学过的内容真正留下来。
             </p>
@@ -346,7 +367,9 @@ function ReviewPage() {
                   <item.icon className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="text-xs text-[var(--text-secondary)]">{item.label}</div>
+                  <div className="text-xs text-[var(--text-secondary)]">
+                    {item.label}
+                  </div>
                   <div className="text-xl font-black text-[var(--text-primary)]">
                     {item.value}
                     {item.suffix}

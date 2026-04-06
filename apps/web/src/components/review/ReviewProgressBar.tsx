@@ -1,10 +1,8 @@
-/**
- * 复习进度条组件
- * 显示当前复习的阶段进度
- */
+import { CheckCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { Progress, Tag, Tooltip } from 'antd';
-import { ReloadOutlined, CheckCircleOutlined } from '@ant-design/icons';
+
 import { getReviewProgress, getStageInterval } from '@/api/review';
+import { useSystemConfig } from '@/hooks/useSystemConfig';
 
 interface ReviewProgressBarProps {
   currentStage: number;
@@ -13,54 +11,64 @@ interface ReviewProgressBarProps {
   completed?: boolean;
 }
 
+const FALLBACK_REVIEW_STAGE_INTERVALS = [1, 2, 3, 5, 7, 14, 30, 60, 90];
+
 export function ReviewProgressBar({
   currentStage,
-  totalStages = 9,
+  totalStages,
   nextReviewDate,
   completed = false,
 }: ReviewProgressBarProps) {
-  const progress = completed ? 100 : getReviewProgress(currentStage);
-  
-  // 生成阶段节点
-  const stages = Array.from({ length: totalStages }, (_, i) => i + 1);
+  const { data: systemConfig } = useSystemConfig();
+  const resolvedTotalStages =
+    totalStages ?? systemConfig?.review.total_stages ?? 9;
+  const reviewStageIntervals =
+    systemConfig?.review.stage_intervals_days ?? FALLBACK_REVIEW_STAGE_INTERVALS;
+  const progress = completed
+    ? 100
+    : getReviewProgress(currentStage, resolvedTotalStages);
+  const stages = Array.from(
+    { length: resolvedTotalStages },
+    (_, index) => index + 1,
+  );
 
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm border border-indigo-50 mb-6">
-      {/* 标题行 */}
-      <div className="flex items-center justify-between mb-4">
+    <div className="mb-6 rounded-2xl border border-indigo-50 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
             <ReloadOutlined className="text-lg" />
           </div>
           <div>
-            <div className="font-bold text-gray-800 text-lg">
+            <div className="text-lg font-bold text-gray-800">
               {completed ? '复习完成' : '复习模式'}
             </div>
             <div className="text-sm text-gray-500">
-              {completed 
-                ? '已完成全部9轮复习，内容已牢固掌握' 
-                : `第 ${currentStage}/${totalStages} 轮复习 · 艾宾浩斯遗忘曲线`
-              }
+              {completed
+                ? `已完成全部 ${resolvedTotalStages} 轮复习，内容已经掌握得更稳了`
+                : `第 ${currentStage}/${resolvedTotalStages} 轮复习 · 艾宾浩斯遗忘曲线`}
             </div>
           </div>
         </div>
-        
-        {!completed && nextReviewDate && (
+
+        {!completed && nextReviewDate ? (
           <Tooltip title="下次复习时间">
-            <Tag className="rounded-full px-3 py-1 bg-indigo-50 text-indigo-600 border-0 font-medium">
-              下次：{getStageInterval(currentStage)}
+            <Tag className="rounded-full border-0 bg-indigo-50 px-3 py-1 font-medium text-indigo-600">
+              {`下次：${getStageInterval(currentStage, reviewStageIntervals)}`}
             </Tag>
           </Tooltip>
-        )}
-        
-        {completed && (
-          <Tag className="rounded-full px-3 py-1 bg-emerald-50 text-emerald-600 border-0 font-medium" icon={<CheckCircleOutlined />}>
+        ) : null}
+
+        {completed ? (
+          <Tag
+            className="rounded-full border-0 bg-emerald-50 px-3 py-1 font-medium text-emerald-600"
+            icon={<CheckCircleOutlined />}
+          >
             全部完成
           </Tag>
-        )}
+        ) : null}
       </div>
 
-      {/* 进度条 */}
       <div className="mb-4">
         <Progress
           percent={progress}
@@ -73,25 +81,24 @@ export function ReviewProgressBar({
           showInfo={false}
           className="!mb-2"
         />
-        
-        {/* 阶段节点 */}
+
         <div className="flex justify-between px-1">
           {stages.map((stage) => {
             const isCompleted = completed || stage < currentStage;
             const isCurrent = !completed && stage === currentStage;
-            
+
             return (
-              <Tooltip 
-                key={stage} 
-                title={`第${stage}轮 · ${getStageInterval(stage)}后复习`}
+              <Tooltip
+                key={stage}
+                title={`第 ${stage} 轮 · ${getStageInterval(stage, reviewStageIntervals)}复习`}
               >
                 <div
-                  className={`w-3 h-3 rounded-full transition-all ${
+                  className={`h-3 w-3 rounded-full transition-all ${
                     isCompleted
                       ? 'bg-indigo-500'
                       : isCurrent
-                      ? 'bg-indigo-500 ring-4 ring-indigo-100'
-                      : 'bg-gray-200'
+                        ? 'bg-indigo-500 ring-4 ring-indigo-100'
+                        : 'bg-gray-200'
                   }`}
                 />
               </Tooltip>
@@ -100,11 +107,10 @@ export function ReviewProgressBar({
         </div>
       </div>
 
-      {/* 阶段标签 */}
       <div className="flex justify-between text-xs text-gray-400">
         <span>开始</span>
-        <span>第3轮</span>
-        <span>第7轮</span>
+        <span>中段</span>
+        <span>完成</span>
       </div>
     </div>
   );

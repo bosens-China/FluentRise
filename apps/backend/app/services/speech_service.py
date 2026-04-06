@@ -7,7 +7,11 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.config import settings
-from app.services.speech import DashScopeRealtimeClient, build_reading_feedback, prepare_audio
+from app.services.speech import (
+    DashScopeFileTranscriptionClient,
+    build_reading_feedback,
+    prepare_audio,
+)
 
 
 class SpeechService:
@@ -15,13 +19,13 @@ class SpeechService:
 
     def __init__(self) -> None:
         self.enabled = bool(settings.DASHSCOPE_API_KEY)
-        self.realtime_client = DashScopeRealtimeClient(sample_rate=16000)
+        self.transcription_client = DashScopeFileTranscriptionClient()
 
     async def analyze_audio(
         self,
         *,
         audio_bytes: bytes,
-        language: str = "en",
+        language: str = settings.SPEECH_DEFAULT_LANGUAGE,
         reference_text: str | None = None,
     ) -> dict[str, Any]:
         """解析上传音频并返回转写与宽松反馈"""
@@ -29,7 +33,7 @@ class SpeechService:
             raise RuntimeError("语音解析服务未配置 DASHSCOPE_API_KEY")
 
         prepared = prepare_audio(audio_bytes)
-        transcript = await self.realtime_client.transcribe(prepared.pcm_bytes, language)
+        transcript = self.transcription_client.transcribe_file(audio_bytes, language=language)
 
         result: dict[str, Any] = {
             "transcript": transcript,
