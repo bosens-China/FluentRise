@@ -36,6 +36,7 @@ export interface UpdateAssessmentRequest {
   english_level: number;
   learning_goals: string[];
   custom_goal?: string;
+  interests?: string[];
 }
 
 export interface UpdateProfileRequest {

@@ -27,13 +27,13 @@ export const useUIStore = create<UIState>()(
       sidebarCollapsed: false,
       mobileMenuOpen: false,
 
-      setTheme: (theme) => {
+      setTheme: (theme: UIState['theme']) => {
         set({ theme });
         applyTheme(theme);
       },
 
       toggleTheme: () => {
-        set((state) => {
+        set((state: UIState) => {
           const newTheme = state.theme === 'light' ? 'dark' : 'light';
           applyTheme(newTheme);
           return { theme: newTheme };
@@ -41,14 +41,17 @@ export const useUIStore = create<UIState>()(
       },
 
       toggleSidebar: () =>
-        set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+        set((state: UIState) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
-      setMobileMenuOpen: (open) => set({ mobileMenuOpen: open }),
+      setMobileMenuOpen: (open: boolean) => set({ mobileMenuOpen: open }),
     }),
     {
       name: 'ui-store',
-      partialize: (state) => ({ theme: state.theme, sidebarCollapsed: state.sidebarCollapsed }),
-    }
+      partialize: (state: UIState) => ({
+        theme: state.theme,
+        sidebarCollapsed: state.sidebarCollapsed,
+      }),
+    },
   )
 );
 

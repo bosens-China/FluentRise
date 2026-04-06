@@ -1,6 +1,8 @@
 """
-会员试用模型
+会员模型。
 """
+
+from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -16,7 +18,7 @@ if TYPE_CHECKING:
 
 
 class Membership(Base):
-    """用户会员状态"""
+    """用户会员状态。"""
 
     __tablename__ = "memberships"
     __table_args__ = (UniqueConstraint("user_id", name="uq_memberships_user_id"),)
@@ -27,12 +29,12 @@ class Membership(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-        comment="用户ID",
+        comment="用户 ID",
     )
     status: Mapped[str] = mapped_column(
         String(20),
         default="trial",
-        comment="会员状态: trial/active/expired",
+        comment="会员状态：trial/active/expired",
     )
     plan_name: Mapped[str] = mapped_column(
         String(50),

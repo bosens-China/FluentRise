@@ -1,42 +1,32 @@
-import {
-  Suspense,
-  lazy,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import { FormOutlined, MessageOutlined } from '@ant-design/icons';
-import { useRequest } from 'ahooks';
-import { Col, Row, message } from 'antd';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  ArrowRightOutlined, 
+  CustomerServiceOutlined, 
+  ReadOutlined, 
+  SoundOutlined,
+  CheckCircleOutlined,
+  MessageOutlined,
+  FormOutlined,
+  PlayCircleFilled
+} from '@ant-design/icons';
+import { Button, Card, Col, Progress, Row, Typography, App } from 'antd';
+import { useEffect, useState, Suspense, lazy } from 'react';
 
-import type { SentenceBreakdownResponse } from '@/api/aiChat';
-import { getSentenceBreakdown } from '@/api/aiChat';
-import type {
-  Article,
-  ArticleAudioTimelineResponse,
-  ExerciseResultItem,
-} from '@/api/article';
-import { getArticleAudioTimeline } from '@/api/article';
-import { getNotes, type Note } from '@/api/note';
-
+import type { Article, ExerciseResultItem } from '@/api/article';
 import { ArticleAIChatDrawer } from './ArticleAIChatDrawer';
 import { ArticleCompletionModal } from './ArticleCompletionModal';
-import { ArticleReaderHeader } from './ArticleReaderHeader';
-import { ArticleReadingPane } from './ArticleReadingPane';
-import { ArticleStudyTabs } from './ArticleStudyTabs';
 import { SentenceBreakdownDrawer } from './SentenceBreakdownDrawer';
-import {
-  EMPTY_EXERCISES,
-  normalizeAnswer,
-  type ExerciseSummary,
-} from './articleReader.shared';
+import { useArticleReaderAssist } from './useArticleReaderAssist';
+import { useArticleReaderAudio } from './useArticleReaderAudio';
+
+const { Title, Text, Paragraph } = Typography;
 
 const NoteEditor = lazy(async () => {
   const module = await import('@/components/note/NoteEditor');
   return { default: module.NoteEditor };
 });
+
+export type StudyStep = 'preview' | 'listening' | 'shadowing' | 'analysis';
 
 interface ArticleReaderProps {
   article: Article;
@@ -44,445 +34,405 @@ interface ArticleReaderProps {
     progress: number,
     completed: boolean,
     exerciseResults?: ExerciseResultItem[],
+    needsRepeat?: boolean,
   ) => void;
   isReviewMode?: boolean;
-  defaultShowChinese?: boolean;
-  onExerciseUpdate?: (summary: ExerciseSummary) => void;
   onComplete?: () => void;
-}
-
-interface SentenceHelperTarget {
-  sentence: string;
-  paragraphIndex: number;
-}
-
-function buildParagraphAudioUrl(text: string, speaker?: string): string {
-  const params = new URLSearchParams({ word: text });
-  if (speaker) {
-    params.set('speaker', speaker);
-  }
-  return `/api/v1/tts/audio?${params.toString()}`;
 }
 
 export function ArticleReader({
   article,
   onProgressUpdate,
-  isReviewMode = false,
-  defaultShowChinese = true,
-  onExerciseUpdate,
   onComplete,
 }: ArticleReaderProps) {
-  const [activeTab, setActiveTab] = useState('tips');
-  const [showChinese, setShowChinese] = useState(defaultShowChinese);
-  const [exerciseAnswers, setExerciseAnswers] = useState<
-    Record<number, string>
-  >({});
-  const [checkedMap, setCheckedMap] = useState<Record<number, boolean>>({});
-  const [readProgress, setReadProgress] = useState(article.is_read || 0);
-  const [audioTimeline, setAudioTimeline] =
-    useState<ArticleAudioTimelineResponse | null>(null);
-  const [loadingAudio, setLoadingAudio] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentPlaybackParagraphIndex, setCurrentPlaybackParagraphIndex] =
-    useState<number | null>(null);
-  const [currentSegmentElapsedMs, setCurrentSegmentElapsedMs] = useState(0);
-  const [isNoteEditorOpen, setIsNoteEditorOpen] = useState(false);
-  const [isAIChatOpen, setIsAIChatOpen] = useState(false);
-  const [isCompletionOpen, setIsCompletionOpen] = useState(false);
-  const [helperOpen, setHelperOpen] = useState(false);
-  const [helperTarget, setHelperTarget] = useState<SentenceHelperTarget | null>(
-    null,
-  );
-  const [helperData, setHelperData] =
-    useState<SentenceBreakdownResponse | null>(null);
-  const [currentNote, setCurrentNote] = useState<Note | null>(null);
-  const [loadingTTSKey, setLoadingTTSKey] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const singleAudioCache = useRef<Record<string, HTMLAudioElement>>({});
-  const currentAudioUrlRef = useRef<string | null>(null);
-  const isAdvancingSegmentRef = useRef(false);
-  const exercises = article.exercises ?? EMPTY_EXERCISES;
+  const { message } = App.useApp();
+  const [step, setStep] = useState<StudyStep>('preview');
+  
+  // Listening state
+  const [listenCount, setListenCount] = useState(0);
+  
+  // Shadowing state
+  const [currentShadowingIndex, setCurrentShadowingIndex] = useState(-1);
+  const [isPausedForShadowing, setIsPausedForShadowing] = useState(false);
 
+  const {
+    currentNote,
+    helperData,
+    helperOpen,
+    helperTarget,
+    isAIChatOpen,
+    isCompletionOpen,
+    isNoteEditorOpen,
+    openNoteEditor,
+    openSentenceHelper,
+    sentenceBreakdownRequest,
+    setHelperOpen,
+    setIsAIChatOpen,
+    setIsCompletionOpen,
+    setIsNoteEditorOpen,
+  } = useArticleReaderAssist({ articleId: article.id });
+
+  const {
+    audioRef,
+    audioTimeline,
+    isPlaying,
+    playSingleTTS,
+    setIsPlaying,
+  } = useArticleReaderAudio({ article });
+
+  // 影子跟读逻辑
   useEffect(() => {
-    setShowChinese(defaultShowChinese);
-  }, [defaultShowChinese]);
+    if (step !== 'shadowing' || !isPlaying || currentShadowingIndex === -1 || !audioTimeline?.segments) return;
 
-  useEffect(() => {
-    setReadProgress(article.is_read || 0);
-    setActiveTab('tips');
-    setExerciseAnswers({});
-    setCheckedMap({});
-    setHelperOpen(false);
-    setHelperTarget(null);
-    setHelperData(null);
-    setCurrentNote(null);
-    setIsAIChatOpen(false);
-    setIsCompletionOpen(false);
-    setLoadingTTSKey(null);
-    setAudioTimeline(null);
-    setCurrentPlaybackParagraphIndex(null);
-    setCurrentSegmentElapsedMs(0);
-    setIsPlaying(false);
-    currentAudioUrlRef.current = null;
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.removeAttribute('src');
-      audioRef.current.load();
-    }
-  }, [article.id, article.is_read]);
+    const segment = audioTimeline.segments[currentShadowingIndex];
+    if (!segment) return;
 
-  const sentenceBreakdownRequest = useRequest(
-    async (params: {
-      sentence: string;
-      article_id?: number;
-      paragraph_index?: number;
-    }) => {
-      try {
-        return await getSentenceBreakdown(params);
-      } catch {
-        return getSentenceBreakdown(params);
-      }
-    },
-    {
-      manual: true,
-      onSuccess: (data) => setHelperData(data),
-      onError: () => {
-        message.error('句子拆解暂时失败，请稍后再试');
-      },
-    },
-  );
-
-  const articleNoteRequest = useRequest(
-    async () => {
-      const response = await getNotes({
-        page: 1,
-        page_size: 1,
-        article_id: article.id,
-      });
-      return response.items[0] ?? null;
-    },
-    {
-      manual: true,
-      onSuccess: (data) => setCurrentNote(data),
-      onError: () => {
-        message.error('读取笔记失败，请稍后再试');
-      },
-    },
-  );
-
-  const buildExerciseResults = useCallback((): ExerciseResultItem[] => {
-    return exercises.map((exercise, index) => {
-      const expectedAnswer = exercise.answer || '';
-      const userAnswer = exerciseAnswers[index] || '';
-      return {
-        question: exercise.question,
-        expected_answer: expectedAnswer,
-        user_answer: userAnswer,
-        is_correct:
-          normalizeAnswer(userAnswer) === normalizeAnswer(expectedAnswer),
-      };
-    });
-  }, [exerciseAnswers, exercises]);
-
-  const exerciseSummary = useMemo<ExerciseSummary | undefined>(() => {
-    const checkedIndexes = Object.keys(checkedMap);
-    if (checkedIndexes.length === 0 || exercises.length === 0) {
-      return undefined;
-    }
-
-    const results = buildExerciseResults();
-    return {
-      correct: results.filter((item) => item.is_correct).length,
-      total: exercises.length,
-      results,
-    };
-  }, [buildExerciseResults, checkedMap, exercises.length]);
-
-  useEffect(() => {
-    if (!onExerciseUpdate || !exerciseSummary) {
-      return;
-    }
-    onExerciseUpdate(exerciseSummary);
-  }, [exerciseSummary, onExerciseUpdate]);
-
-  const playSingleTTS = useCallback(async (text: string, speaker?: string) => {
-    const cacheKey = `${speaker ?? 'default'}::${text}`;
-    const cachedAudio = singleAudioCache.current[cacheKey];
-    setLoadingTTSKey(text);
-
-    if (cachedAudio) {
-      cachedAudio.currentTime = 0;
-      try {
-        await cachedAudio.play();
-      } catch {
-        message.error('音频播放失败');
-      } finally {
-        setLoadingTTSKey((current) => (current === text ? null : current));
-      }
-      return;
-    }
-
-    const audio = new Audio(buildParagraphAudioUrl(text, speaker));
-    singleAudioCache.current[cacheKey] = audio;
-
-    try {
-      await audio.play();
-    } catch {
-      message.error('音频播放失败');
-    } finally {
-      setLoadingTTSKey((current) => (current === text ? null : current));
-    }
-  }, []);
-
-  const ensureAudioTimeline = useCallback(async () => {
-    if (audioTimeline) {
-      return audioTimeline;
-    }
-
-    try {
-      const nextTimeline = await getArticleAudioTimeline(article.id);
-      setAudioTimeline(nextTimeline);
-      return nextTimeline;
-    } catch {
-      const retryTimeline = await getArticleAudioTimeline(article.id);
-      setAudioTimeline(retryTimeline);
-      return retryTimeline;
-    }
-  }, [article.id, audioTimeline]);
-
-  const playParagraphSegment = useCallback(
-    async (paragraphIndex: number, resetCurrentTime = true) => {
-      const audioElement = audioRef.current;
-      const paragraph = article.content[paragraphIndex];
-
-      if (!audioElement || !paragraph) {
-        return;
-      }
-
-      const nextUrl = buildParagraphAudioUrl(paragraph.en, paragraph.speaker);
-      if (currentAudioUrlRef.current !== nextUrl) {
-        currentAudioUrlRef.current = nextUrl;
-        audioElement.src = nextUrl;
-      }
-      if (resetCurrentTime) {
-        audioElement.currentTime = 0;
-      }
-
-      setCurrentPlaybackParagraphIndex(paragraphIndex);
-      setCurrentSegmentElapsedMs(Math.round(audioElement.currentTime * 1000));
-      await audioElement.play();
-      setIsPlaying(true);
-    },
-    [article.content],
-  );
-
-  const toggleAudio = async () => {
-    const audioElement = audioRef.current;
-    if (!audioElement) {
-      return;
-    }
-
-    if (isPlaying) {
-      audioElement.pause();
-      setIsPlaying(false);
-      return;
-    }
-
-    setLoadingAudio(true);
-    try {
-      try {
-        await ensureAudioTimeline();
-      } catch {
-        message.warning('时间线准备失败，本次将先播放音频，高亮会稍后恢复');
-      }
-
-      if (
-        currentPlaybackParagraphIndex !== null &&
-        currentAudioUrlRef.current
-      ) {
-        await audioElement.play();
-        setIsPlaying(true);
-      } else {
-        await playParagraphSegment(0);
-      }
-    } catch {
-      message.error('课文朗读暂时失败，请稍后重试');
-    } finally {
-      setLoadingAudio(false);
-    }
-  };
-
-  const openSentenceHelper = (sentence: string, paragraphIndex: number) => {
-    setHelperTarget({ sentence, paragraphIndex });
-    setHelperData(null);
-    setHelperOpen(true);
-    void sentenceBreakdownRequest.run({
-      sentence,
-      article_id: article.id,
-      paragraph_index: paragraphIndex,
-    });
-  };
-
-  const handleAnswerSelect = (exerciseIndex: number, answer: string) => {
-    setExerciseAnswers((previous) => ({
-      ...previous,
-      [exerciseIndex]: answer,
-    }));
-  };
-
-  const checkAnswer = (exerciseIndex: number, answerOverride?: string) => {
-    const nextCheckedMap = { ...checkedMap, [exerciseIndex]: true };
-    setCheckedMap(nextCheckedMap);
-
-    const nextAnswers =
-      answerOverride === undefined
-        ? exerciseAnswers
-        : {
-            ...exerciseAnswers,
-            [exerciseIndex]: answerOverride,
-          };
-    const currentResults = exercises.map((exercise, index) => {
-      const expectedAnswer = exercise.answer || '';
-      const userAnswer = nextAnswers[index] || '';
-      return {
-        question: exercise.question,
-        expected_answer: expectedAnswer,
-        user_answer: userAnswer,
-        is_correct:
-          normalizeAnswer(userAnswer) === normalizeAnswer(expectedAnswer),
-      };
-    });
-    const answeredCount = exercises.filter((_, index) =>
-      Boolean(normalizeAnswer(nextAnswers[index])),
-    ).length;
-    const exerciseProgress =
-      exercises.length === 0
-        ? 50
-        : Math.round((answeredCount / exercises.length) * 50);
-    const nextProgress = Math.max(readProgress, exerciseProgress);
-
-    setReadProgress(nextProgress);
-    onProgressUpdate?.(nextProgress, false, currentResults);
-  };
-
-  const handleMarkComplete = () => {
-    setIsCompletionOpen(true);
-  };
-
-  const handleCompleteCourse = (results: ExerciseResultItem[]) => {
-    setReadProgress(100);
-    setIsCompletionOpen(false);
-    onProgressUpdate?.(100, true, results);
-  };
-
-  const handleOpenNoteEditor = () => {
-    setIsNoteEditorOpen(true);
-    void articleNoteRequest.run();
-  };
-
-  const handleAudioEnded = () => {
-    if (isAdvancingSegmentRef.current) {
-      return;
-    }
-
-    const nextIndex =
-      currentPlaybackParagraphIndex === null
-        ? null
-        : currentPlaybackParagraphIndex + 1;
-
-    if (nextIndex === null || nextIndex >= article.content.length) {
-      setIsPlaying(false);
-      setCurrentPlaybackParagraphIndex(null);
-      setCurrentSegmentElapsedMs(0);
-      currentAudioUrlRef.current = null;
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-      }
-      return;
-    }
-
-    isAdvancingSegmentRef.current = true;
-    setCurrentSegmentElapsedMs(0);
-    void playParagraphSegment(nextIndex)
-      .catch(() => {
-        message.error('课文朗读中断，请稍后重试');
+    // 监听播放位置，当接近 segment 结束时准备暂停
+    const checkPause = () => {
+      if (audioRef.current && audioRef.current.currentTime * 1000 >= segment.end_ms - 50) {
+        audioRef.current.pause();
         setIsPlaying(false);
-        setCurrentPlaybackParagraphIndex(null);
-        setCurrentSegmentElapsedMs(0);
-      })
-      .finally(() => {
-        isAdvancingSegmentRef.current = false;
-      });
+        setIsPausedForShadowing(true);
+        
+        // 计算暂停时间：max(3s, 字符数/15 * 2)
+        const pauseMs = Math.max(3000, (segment.text.length / 15) * 2000);
+        
+        setTimeout(() => {
+          setIsPausedForShadowing(false);
+          const nextIdx = currentShadowingIndex + 1;
+          if (nextIdx < audioTimeline.segments.length) {
+            setCurrentShadowingIndex(nextIdx);
+            if (audioRef.current) {
+              audioRef.current.currentTime = audioTimeline.segments[nextIdx].start_ms / 1000;
+              audioRef.current.play();
+              setIsPlaying(true);
+            }
+          } else {
+            setCurrentShadowingIndex(-1);
+            message.success('影子跟读完成！进入深度解析阶段');
+            setStep('analysis');
+          }
+        }, pauseMs);
+      }
+    };
+
+    const interval = setInterval(checkPause, 100);
+    return () => clearInterval(interval);
+  }, [step, isPlaying, currentShadowingIndex, audioTimeline, audioRef, message, setIsPlaying]);
+
+  const handleStartShadowing = () => {
+    setStep('shadowing');
+    setCurrentShadowingIndex(0);
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play();
+      setIsPlaying(true);
+    }
   };
+
+  const handleListenEnd = () => {
+    setListenCount(prev => {
+      const next = prev + 1;
+      if (next >= 5) {
+        message.success('盲听 5 遍达成！解锁影子跟读');
+      }
+      return next;
+    });
+    setIsPlaying(false);
+  };
+
+  const renderStepHeader = () => (
+    <div className="mb-8 flex items-center justify-between px-2">
+      <div className="flex gap-4">
+        {[
+          { key: 'preview', label: '1. 预热', icon: <ReadOutlined /> },
+          { key: 'listening', label: '2. 盲听', icon: <CustomerServiceOutlined /> },
+          { key: 'shadowing', label: '3. 跟读', icon: <SoundOutlined /> },
+          { key: 'analysis', label: '4. 解析', icon: <CheckCircleOutlined /> },
+        ].map((s) => (
+          <div 
+            key={s.key} 
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold transition-all ${
+              step === s.key ? 'bg-[var(--primary)] text-white shadow-lg scale-105' : 'text-slate-400 opacity-60'
+            }`}
+          >
+            {s.icon}
+            <span className="hidden sm:inline">{s.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
-    <div className="mx-auto w-full">
-      <ArticleReaderHeader
-        article={article}
-        readProgress={readProgress}
-        isReviewMode={isReviewMode}
-        onComplete={onComplete}
-        onMarkComplete={handleMarkComplete}
-      />
+    <div className="mx-auto max-w-4xl pb-32">
+      {renderStepHeader()}
 
-      <Row gutter={[24, 32]}>
-        <ArticleReadingPane
-          article={article}
-          audioRef={audioRef}
-          audioTimeline={audioTimeline}
-          loadingAudio={loadingAudio}
-          isPlaying={isPlaying}
-          currentPlaybackParagraphIndex={currentPlaybackParagraphIndex}
-          currentSegmentElapsedMs={currentSegmentElapsedMs}
-          showChinese={showChinese}
-          loadingTTSKey={loadingTTSKey}
-          onToggleAudio={() => void toggleAudio()}
-          onToggleChinese={() => setShowChinese((value) => !value)}
-          onPlaySingleTTS={(text, speaker) => void playSingleTTS(text, speaker)}
-          onOpenSentenceHelper={openSentenceHelper}
-          onAudioEnded={handleAudioEnded}
-          onAudioPause={() => {
-            if (!isAdvancingSegmentRef.current) {
-              setIsPlaying(false);
-            }
-          }}
-          onAudioPlay={() => setIsPlaying(true)}
-          onAudioTimeUpdate={setCurrentSegmentElapsedMs}
-        />
+      <AnimatePresence mode="wait">
+        {step === 'preview' && (
+          <motion.div key="preview" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+            <Card className="rounded-[32px] border-0 shadow-xl overflow-hidden">
+              <div className="bg-gradient-to-br from-amber-500 to-orange-600 p-8 text-white">
+                <Title level={2} className="!text-white !mb-2">{article.title}</Title>
+                <Paragraph className="!text-white/90 text-lg opacity-80">在开始听读前，先熟悉一下本课的生词。</Paragraph>
+              </div>
+              <div className="p-8">
+                <Title level={4} className="mb-6 flex items-center gap-2">
+                  <span className="h-6 w-1.5 bg-amber-500 rounded-full" />
+                  本课生词 ({article.vocabulary?.length || 0})
+                </Title>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {article.vocabulary?.map((v) => (
+                    <button
+                      key={v.word}
+                      type="button"
+                      onClick={() => void playSingleTTS(v.word)}
+                      className="group flex items-center justify-between p-4 rounded-2xl bg-slate-50 hover:bg-amber-50 border border-transparent hover:border-amber-200 transition-all text-left"
+                    >
+                      <div>
+                        <div className="text-xl font-bold text-slate-800">{v.word}</div>
+                        <div className="text-sm text-slate-400 font-mono">{v.us_phonetic}</div>
+                        <div className="mt-1 text-slate-600">{v.meaning}</div>
+                      </div>
+                      <SoundOutlined className="text-xl text-slate-300 group-hover:text-amber-500" />
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-12 flex justify-center">
+                  <Button 
+                    type="primary" 
+                    size="large" 
+                    shape="round" 
+                    className="h-16 px-12 text-lg font-bold shadow-xl shadow-amber-200"
+                    onClick={() => setStep('listening')}
+                  >
+                    掌握了，进入盲听 <ArrowRightOutlined />
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+        )}
 
-        <Col xs={24} lg={10} xl={9}>
-          <div className="sticky top-24">
-            <ArticleStudyTabs
-              article={article}
-              activeTab={activeTab}
-              loadingTTSKey={loadingTTSKey}
-              onTabChange={setActiveTab}
-              onPlaySingleTTS={(text) => void playSingleTTS(text)}
-            />
-          </div>
-        </Col>
-      </Row>
+        {step === 'listening' && (
+          <motion.div key="listening" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+            <Card className="rounded-[32px] border-0 shadow-xl p-12 text-center">
+              <div className="mx-auto mb-8 flex h-32 w-32 items-center justify-center rounded-full bg-blue-50 text-blue-500 text-5xl">
+                <CustomerServiceOutlined />
+              </div>
+              <Title level={2}>盲听磨耳朵</Title>
+              <Paragraph className="text-lg text-slate-500 mb-10">
+                暂时不要看文本。闭上眼，通过声音去感受文章的含义。你需要听满 5 遍。
+              </Paragraph>
+              
+              <div className="flex flex-col items-center gap-8">
+                <div className="relative">
+                  <Button
+                    type="primary"
+                    shape="circle"
+                    className="h-32 w-32 border-0 bg-blue-500 hover:scale-105 shadow-2xl transition-all"
+                    icon={isPlaying ? <div className="h-8 w-8 bg-white rounded-sm mx-auto" /> : <PlayCircleFilled className="text-4xl" />}
+                    onClick={() => {
+                      if (audioRef.current) {
+                        if (isPlaying) {
+                          audioRef.current.pause();
+                          setIsPlaying(false);
+                        } else {
+                          audioRef.current.play();
+                          setIsPlaying(true);
+                        }
+                      }
+                    }}
+                  />
+                  {isPlaying && (
+                    <div className="absolute inset-0 -z-10 animate-ping rounded-full bg-blue-400 opacity-20" />
+                  )}
+                </div>
 
-      <div className="fixed bottom-6 right-4 z-30 flex flex-col items-end gap-3 md:bottom-8 md:right-8">
-        <button
-          type="button"
-          aria-label="打开 AI 课文对话"
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-[linear-gradient(135deg,_#ffb347,_#ff8a00)] text-white shadow-[0_18px_36px_rgba(255,138,0,0.28)] transition-transform duration-200 hover:-translate-y-0.5"
+                <div className="w-full max-w-sm">
+                  <div className="flex justify-between mb-2 px-1">
+                    <span className="font-bold text-blue-600">盲听进度</span>
+                    <span className="font-bold text-blue-600">{listenCount}/5</span>
+                  </div>
+                  <Progress percent={listenCount * 20} showInfo={false} strokeColor="#3b82f6" />
+                </div>
+
+                {listenCount >= 5 && (
+                  <Button 
+                    type="primary" 
+                    size="large" 
+                    shape="round" 
+                    className="h-14 px-10 font-bold bg-gradient-to-r from-blue-500 to-indigo-600 border-0 shadow-lg"
+                    onClick={handleStartShadowing}
+                  >
+                    开始影子跟读 <ArrowRightOutlined />
+                  </Button>
+                )}
+              </div>
+            </Card>
+            <audio ref={audioRef} onEnded={handleListenEnd} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} />
+          </motion.div>
+        )}
+
+        {step === 'shadowing' && (
+          <motion.div key="shadowing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+            <Card className="rounded-[32px] border-0 shadow-xl overflow-hidden">
+              <div className="bg-slate-800 p-8 text-white flex items-center justify-between">
+                <div>
+                  <Title level={3} className="!text-white !mb-1">影子跟读</Title>
+                  <Paragraph className="!text-slate-400 !mb-0">每句播完后会自动暂停，请大声复读。</Paragraph>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-black text-amber-500">
+                    {currentShadowingIndex + 1} <span className="text-sm text-slate-500">/ {audioTimeline?.segments?.length || 0}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="p-12 min-h-[300px] flex flex-col items-center justify-center text-center">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={currentShadowingIndex}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 1.1 }}
+                    className="space-y-6"
+                  >
+                    <div className="text-3xl font-black text-slate-800 leading-relaxed max-w-2xl">
+                      {audioTimeline?.segments?.[currentShadowingIndex]?.text}
+                    </div>
+                    
+                    {isPausedForShadowing ? (
+                      <motion.div 
+                        animate={{ scale: [1, 1.1, 1] }} 
+                        transition={{ repeat: Infinity, duration: 1 }}
+                        className="flex flex-col items-center gap-2"
+                      >
+                        <div className="h-1.5 w-48 bg-amber-100 rounded-full overflow-hidden">
+                          <motion.div 
+                            className="h-full bg-amber-500" 
+                            initial={{ width: '0%' }} 
+                            animate={{ width: '100%' }} 
+                            transition={{ duration: Math.max(3, ((audioTimeline?.segments?.[currentShadowingIndex]?.text.length || 0) / 15) * 2) }}
+                          />
+                        </div>
+                        <Text className="text-amber-600 font-bold uppercase tracking-widest">请开口复读...</Text>
+                      </motion.div>
+                    ) : (
+                      <div className="flex justify-center gap-1">
+                        {[1,2,3,4,5].map(i => (
+                          <motion.div 
+                            key={i}
+                            animate={{ height: isPlaying ? [10, 30, 10] : 10 }}
+                            transition={{ repeat: Infinity, duration: 0.5, delay: i * 0.1 }}
+                            className="w-1.5 bg-blue-400 rounded-full"
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+
+        {step === 'analysis' && (
+          <motion.div key="analysis" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <Row gutter={[24, 24]}>
+              <Col xs={24} lg={15}>
+                <div className="space-y-6">
+                  <Card className="rounded-[28px] border-0 shadow-lg p-8">
+                    <Title level={3} className="mb-8">正文对照</Title>
+                    <div className="space-y-8">
+                      {article.content.map((block, idx) => (
+                        <div key={idx} className="group relative">
+                          <div className="flex items-start gap-4">
+                            <button 
+                              type="button"
+                              onClick={() => void playSingleTTS(block.en, block.speaker)}
+                              className="mt-1 h-8 w-8 shrink-0 flex items-center justify-center rounded-full bg-slate-50 hover:bg-amber-100 text-slate-400 hover:text-amber-600 transition-all"
+                            >
+                              <SoundOutlined />
+                            </button>
+                            <div className="flex-1">
+                              <Paragraph className="text-xl font-medium text-slate-800 leading-relaxed mb-2">
+                                {block.en}
+                              </Paragraph>
+                              <Paragraph className="text-slate-500 leading-relaxed">
+                                {block.zh}
+                              </Paragraph>
+                            </div>
+                            <Button 
+                              type="link" 
+                              className="opacity-0 group-hover:opacity-100" 
+                              onClick={() => openSentenceHelper(block.en, idx)}
+                            >
+                              拆句
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-12 flex justify-center border-t pt-10">
+                      <Button 
+                        type="primary" 
+                        size="large" 
+                        shape="round" 
+                        className="h-16 px-16 text-lg font-bold bg-emerald-500 hover:bg-emerald-600 border-0 shadow-xl shadow-emerald-100"
+                        onClick={() => setIsCompletionOpen(true)}
+                      >
+                        我学完了，去闯关！
+                      </Button>
+                    </div>
+                  </Card>
+                </div>
+              </Col>
+              
+              <Col xs={24} lg={9}>
+                <div className="sticky top-24 space-y-6">
+                  <Card title="重点语法" className="rounded-2xl border-0 shadow-md">
+                    {article.grammar.map((g, i) => (
+                      <div key={i} className="mb-6 last:mb-0">
+                        <div className="font-bold text-slate-800 mb-1">{g.point}</div>
+                        <div className="text-sm text-slate-500">{g.explanation}</div>
+                      </div>
+                    ))}
+                  </Card>
+                  <Card title="文化锦囊" className="rounded-2xl border-0 shadow-md bg-amber-50/50">
+                    {article.tips.map((t, i) => (
+                      <div key={i} className="mb-4 last:mb-0">
+                        <div className="font-bold text-amber-800 text-sm mb-1">{t.title}</div>
+                        <div className="text-xs text-amber-700/80 leading-relaxed">{t.content}</div>
+                      </div>
+                    ))}
+                  </Card>
+                </div>
+              </Col>
+            </Row>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Float Buttons */}
+      <div className="fixed bottom-8 right-8 z-30 flex flex-col gap-4">
+        <Button 
+          type="primary" 
+          shape="circle" 
+          className="h-14 w-14 shadow-2xl bg-amber-500 border-0" 
+          icon={<MessageOutlined className="text-xl" />} 
           onClick={() => setIsAIChatOpen(true)}
-        >
-          <MessageOutlined className="text-lg" />
-        </button>
-
-        <button
-          type="button"
-          aria-label="打开课文笔记"
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-[linear-gradient(135deg,_#58CC02,_#3ba700)] text-white shadow-[0_18px_36px_rgba(88,204,2,0.24)] transition-transform duration-200 hover:-translate-y-0.5"
-          onClick={handleOpenNoteEditor}
-        >
-          <FormOutlined className="text-lg" />
-        </button>
+        />
+        <Button 
+          type="primary" 
+          shape="circle" 
+          className="h-14 w-14 shadow-2xl bg-emerald-500 border-0" 
+          icon={<FormOutlined className="text-xl" />} 
+          onClick={openNoteEditor}
+        />
       </div>
 
+      {/* Modals & Drawers */}
       <SentenceBreakdownDrawer
         open={helperOpen}
         loading={sentenceBreakdownRequest.loading}
@@ -490,36 +440,27 @@ export function ArticleReader({
         data={helperData}
         onClose={() => setHelperOpen(false)}
       />
-
-      <ArticleAIChatDrawer
-        article={article}
-        open={isAIChatOpen}
-        onClose={() => setIsAIChatOpen(false)}
-      />
-
+      <ArticleAIChatDrawer article={article} open={isAIChatOpen} onClose={() => setIsAIChatOpen(false)} />
       <ArticleCompletionModal
         open={isCompletionOpen}
         article={article}
-        exerciseSummary={exerciseSummary}
-        exerciseAnswers={exerciseAnswers}
-        checkedMap={checkedMap}
         onClose={() => setIsCompletionOpen(false)}
-        onAnswerSelect={handleAnswerSelect}
-        onCheckAnswer={checkAnswer}
-        onComplete={handleCompleteCourse}
+        onComplete={(results, needsRepeat) => {
+          setIsCompletionOpen(false);
+          onProgressUpdate?.(100, true, results, needsRepeat);
+          onComplete?.();
+        }}
+        // 简化这些，因为重构后逻辑在内部
+        exerciseAnswers={{}}
+        checkedMap={{}}
+        onAnswerSelect={() => {}}
+        onCheckAnswer={() => {}}
       />
-
-      {isNoteEditorOpen ? (
+      {isNoteEditorOpen && (
         <Suspense fallback={null}>
-          <NoteEditor
-            open={isNoteEditorOpen}
-            onClose={() => setIsNoteEditorOpen(false)}
-            onSuccess={() => void articleNoteRequest.run()}
-            initialNote={currentNote}
-            articleId={article.id}
-          />
+          <NoteEditor open={isNoteEditorOpen} onClose={() => setIsNoteEditorOpen(false)} initialNote={currentNote} articleId={article.id} />
         </Suspense>
-      ) : null}
+      )}
     </div>
   );
 }

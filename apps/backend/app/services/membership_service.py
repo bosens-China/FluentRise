@@ -1,28 +1,30 @@
 """
-会员服务
+会员服务。
 """
 
-from datetime import UTC, datetime, timedelta
+from __future__ import annotations
 
-from sqlalchemy import select
+from datetime import timedelta
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.time import utc_now
 from app.models.membership import Membership
+from app.repositories.membership_repository import get_membership_by_user_id
 
 
 class MembershipService:
-    """会员试用服务"""
+    """会员试用服务。"""
 
     TRIAL_DAYS = 7
 
     @staticmethod
-    async def ensure_membership(db: AsyncSession, user_id: int) -> Membership:
-        """确保用户拥有会员记录。"""
-        result = await db.execute(select(Membership).where(Membership.user_id == user_id))
-        membership = result.scalar_one_or_none()
+    async def ensure_membership(*, db: AsyncSession, user_id: int) -> Membership:
+        """确保用户存在会员记录。"""
+        membership = await get_membership_by_user_id(db, user_id=user_id)
 
         if membership is None:
-            now = datetime.now(UTC)
+            now = utc_now()
             membership = Membership(
                 user_id=user_id,
                 status="trial",
@@ -35,7 +37,7 @@ class MembershipService:
             await db.refresh(membership)
             return membership
 
-        if membership.expires_at <= datetime.now(UTC) and membership.status != "expired":
+        if membership.expires_at <= utc_now() and membership.status != "expired":
             membership.status = "expired"
             await db.commit()
             await db.refresh(membership)
@@ -44,8 +46,7 @@ class MembershipService:
 
     @staticmethod
     def get_days_left(membership: Membership) -> int:
-        """返回会员剩余天数。"""
-        remaining = membership.expires_at - datetime.now(UTC)
+        remaining = membership.expires_at - utc_now()
         return max(0, remaining.days + (1 if remaining.seconds > 0 else 0))
 
 

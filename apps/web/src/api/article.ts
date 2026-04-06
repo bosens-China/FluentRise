@@ -63,7 +63,7 @@ export interface ArticleAudioTimelineResponse {
 export interface Article {
   id: number;
   title: string;
-  publish_date: string;
+  publish_date: string | null;
   level: number;
   source_book: number | null;
   source_lesson: number | null;
@@ -74,27 +74,40 @@ export interface Article {
   exercises: Exercise[] | null;
   is_read: number;
   is_completed: boolean;
+  needs_repeat: boolean;
   created_at: string;
 }
 
-export interface TodayArticleResponse {
-  has_article: boolean;
-  article: Article | null;
+export interface ArticleProposal {
+  id: number;
+  title: string;
+  description: string | null;
+  level: number;
+  order_index: number;
+  status: 'pending' | 'realized';
+  article_id: number | null;
+  created_at: string;
 }
 
-export interface GenerateArticleParams {
-  forceRegenerate?: boolean;
-  targetDate?: string;
-  feedbackReason?: string;
-  feedbackComment?: string;
+export interface LearningPathResponse {
+  completed_articles: {
+    id: number;
+    title: string;
+    level: number;
+    completed_at: string | null;
+  }[];
+  proposals: ArticleProposal[];
+  current_level: number;
+  total_vocab_count: number;
 }
 
 export interface ArticleListItem {
   id: number;
   title: string;
-  publish_date: string;
+  publish_date: string | null;
   level: number;
   is_completed: boolean;
+  needs_repeat: boolean;
   created_at: string;
 }
 
@@ -103,12 +116,40 @@ export interface ArticleListResponse {
   total: number;
 }
 
-export async function getTodayArticle(): Promise<TodayArticleResponse> {
-  return request.get('/articles/today');
+export interface MiniStoryResponse {
+  story_en: string;
+  story_zh: string;
+  questions: {
+    id: string;
+    question_en: string;
+    question_zh: string;
+  }[];
+}
+
+export interface MiniStoryEvaluateRequest {
+  story_en: string;
+  questions: { id: string; question_en: string }[];
+  answers: Record<string, string>;
+}
+
+export interface MiniStoryEvaluateResponse {
+  is_passed: boolean;
+  score: number;
+  feedback_zh: string;
+}
+
+export async function getLearningPath(): Promise<LearningPathResponse> {
+  return request.get('/articles/path');
+}
+
+export async function realizeProposal(proposalId: number): Promise<Article> {
+  return request.post(`/articles/proposals/${proposalId}/realize`, {}, {
+    timeout: 120000,
+  });
 }
 
 export async function generateTodayArticle(
-  params: GenerateArticleParams = {},
+  params: { forceRegenerate?: boolean; targetDate?: string; feedbackReason?: string; feedbackComment?: string } = {},
 ): Promise<Article> {
   return request.post(
     '/articles/today/generate',
@@ -142,10 +183,12 @@ export async function updateArticleProgress(
   isRead: number,
   isCompleted?: boolean,
   exerciseResults?: ExerciseResultItem[],
+  needsRepeat?: boolean,
 ): Promise<Article> {
   return request.patch(`/articles/${articleId}/progress`, {
     is_read: isRead,
     is_completed: isCompleted,
+    needs_repeat: needsRepeat,
     exercise_results: exerciseResults,
   });
 }
@@ -165,4 +208,17 @@ export async function getArticleAudioTimeline(
   articleId: number,
 ): Promise<ArticleAudioTimelineResponse> {
   return request.get(`/articles/${articleId}/audio-timeline`);
+}
+
+export async function generateArticleMiniStory(
+  articleId: number,
+): Promise<MiniStoryResponse> {
+  return request.post(`/articles/${articleId}/mini-story/generate`);
+}
+
+export async function evaluateArticleMiniStory(
+  articleId: number,
+  data: MiniStoryEvaluateRequest,
+): Promise<MiniStoryEvaluateResponse> {
+  return request.post(`/articles/${articleId}/mini-story/evaluate`, data);
 }

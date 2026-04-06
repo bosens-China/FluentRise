@@ -2,16 +2,17 @@
 认证相关路由。
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from __future__ import annotations
 
+from fastapi import APIRouter, Depends
+
+from app.api.deps import DbSession
 from app.core.config import settings
 from app.core.rate_limit import (
     auth_login_phone_rate_limit,
     auth_refresh_rate_limit,
     auth_sms_send_rate_limit,
 )
-from app.db.database import get_db
 from app.schemas.user import (
     LoginResponse,
     LogoutRequest,
@@ -35,22 +36,13 @@ router = APIRouter(prefix="/auth", tags=["认证"])
 )
 async def send_sms_code(request: SendSmsCodeRequest) -> SmsCodeResponse:
     """发送短信验证码到指定手机号。"""
-    success, result = await AuthService.send_sms_code(request.phone)
-
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=result,
-        )
+    await AuthService.send_sms_code(request.phone)
 
     message = "验证码已发送"
     if settings.ENVIRONMENT == "development":
-        message = "验证码已发送（开发环境请查看后端日志）"
+        message = "验证码已发送，开发环境请查看后端日志"
 
-    return SmsCodeResponse(
-        message=message,
-        expire_seconds=settings.SMS_CODE_EXPIRE_SECONDS,
-    )
+    return SmsCodeResponse(message=message, expire_seconds=settings.SMS_CODE_EXPIRE_SECONDS)
 
 
 @router.post(
@@ -61,18 +53,10 @@ async def send_sms_code(request: SendSmsCodeRequest) -> SmsCodeResponse:
 )
 async def login_by_phone(
     request: PhoneLoginRequest,
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
 ) -> LoginResponse:
     """使用手机号和验证码登录。"""
-    result = await AuthService.login_by_phone(db, request.phone, request.code)
-
-    if not result:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="验证码错误或已过期",
-        )
-
-    return result
+    return await AuthService.login_by_phone(db=db, phone=request.phone, code=request.code)
 
 
 @router.post(
@@ -83,18 +67,10 @@ async def login_by_phone(
 )
 async def refresh_token(
     request: RefreshTokenRequest,
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
 ) -> TokenResponse:
     """使用刷新令牌换取新的访问令牌。"""
-    result = await AuthService.refresh_tokens(db, request.refresh_token)
-
-    if not result:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的刷新令牌",
-        )
-
-    return result
+    return await AuthService.refresh_tokens(db=db, refresh_token=request.refresh_token)
 
 
 @router.post("/logout", response_model=MessageResponse, summary="退出登录")

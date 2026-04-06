@@ -25,6 +25,7 @@ dependencies = [
     "phonenumbers>=8.13.0",
     "edge-tts>=7.2.7",
     "fastapi-limiter>=0.2.0",
+    "loguru>=0.7.3",
 ]
 
 [project.optional-dependencies]
@@ -35,7 +36,6 @@ dev = [
     "pyright>=1.1.389",
 ]
 
-# Ruff 最小化配置
 [tool.ruff]
 target-version = "py312"
 line-length = 100
@@ -47,14 +47,14 @@ ignore = ["E501"]
 [tool.ruff.format]
 quote-style = "double"
 
-
-# uv 任务脚本 - 需要安装: uv pip install taskipy
 [tool.taskipy.tasks]
 dev = "fastapi dev"
 start = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
 lint = "ruff check . --fix"
 format = "ruff format ."
 typecheck = "pyright"
+migrate_up = "alembic -c alembic.ini upgrade head"
+migrate_down = "alembic -c alembic.ini downgrade -1"
 
 [dependency-groups]
 dev = ["pyright>=1.1.408", "taskipy>=1.14.1"]

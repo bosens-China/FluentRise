@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useReactMediaRecorder } from 'react-media-recorder';
 
 type RecorderStatus = 'idle' | 'recording' | 'stopped';
@@ -17,13 +17,28 @@ interface UseSpeechRecorderResult {
   resetRecording: () => void;
 }
 
+function resolveRecorderErrorMessage(status: string): string | null {
+  switch (status) {
+    case 'permission_denied':
+      return '麦克风权限被拒绝，请在浏览器设置里允许录音后重试';
+    case 'media_in_use':
+      return '麦克风正在被其他应用占用，请关闭后重试';
+    case 'invalid_media_constraints':
+      return '当前浏览器不支持所需的录音参数，请更换浏览器后重试';
+    case 'recorder_error':
+    case 'media_aborted':
+      return '录音过程中发生错误，请重新开始录音';
+    default:
+      return null;
+  }
+}
+
 export function useSpeechRecorder(
   options: UseSpeechRecorderOptions = {},
 ): UseSpeechRecorderResult {
   const maxDurationSeconds = options.maxDurationSeconds ?? 60;
   const [remainingSeconds, setRemainingSeconds] = useState(maxDurationSeconds);
   const [recordedFile, setRecordedFile] = useState<File | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const intervalRef = useRef<number | null>(null);
 
   const clearTimer = useCallback(() => {
@@ -66,11 +81,15 @@ export function useSpeechRecorder(
         ? 'stopped'
         : 'idle';
 
+  const errorMessage = useMemo(
+    () => resolveRecorderErrorMessage(recorderStatus),
+    [recorderStatus],
+  );
+
   const resetRecording = useCallback(() => {
     clearTimer();
     clearBlobUrl();
     setRecordedFile(null);
-    setErrorMessage(null);
     setRemainingSeconds(maxDurationSeconds);
   }, [clearBlobUrl, clearTimer, maxDurationSeconds]);
 
@@ -103,37 +122,10 @@ export function useSpeechRecorder(
   ]);
 
   useEffect(() => {
-    if (recorderStatus === 'permission_denied') {
-      setErrorMessage('麦克风权限被拒绝，请在浏览器设置里允许录音后重试');
-      clearTimer();
-      return;
-    }
-
-    if (recorderStatus === 'media_in_use') {
-      setErrorMessage('麦克风正在被其他应用占用，请关闭后重试');
-      clearTimer();
-      return;
-    }
-
-    if (recorderStatus === 'invalid_media_constraints') {
-      setErrorMessage('当前浏览器不支持所需的录音参数，请更换浏览器后重试');
-      clearTimer();
-      return;
-    }
-
-    if (
-      recorderStatus === 'recorder_error' ||
-      recorderStatus === 'media_aborted'
-    ) {
-      setErrorMessage('录音过程中发生错误，请重新开始录音');
-      clearTimer();
-      return;
-    }
-
-    if (recorderStatus === 'stopped' || recorderStatus === 'idle') {
+    if (errorMessage || recorderStatus === 'stopped' || recorderStatus === 'idle') {
       clearTimer();
     }
-  }, [clearTimer, recorderStatus]);
+  }, [clearTimer, errorMessage, recorderStatus]);
 
   useEffect(() => {
     return () => {

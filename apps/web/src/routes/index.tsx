@@ -2,8 +2,9 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { useRequest } from 'ahooks';
 import { Alert, App, Button, Col, Row, Typography } from 'antd';
+import dayjs from 'dayjs';
 
-import { getTodayArticle } from '@/api/article';
+import { getLearningPath, realizeProposal, type ArticleProposal } from '@/api/article';
 import { getTodayReviewSummary, getTodayReviews } from '@/api/review';
 import {
   getDashboardOverview,
@@ -12,11 +13,11 @@ import {
 } from '@/api/user';
 import { AssessmentModal } from '@/components/assessment';
 import { AchievementPanel } from '@/components/home/AchievementPanel';
+import { LearningPath } from '@/components/home/LearningPath';
 import { LearningProfileCard } from '@/components/home/LearningProfileCard';
 import { MembershipGuideCard } from '@/components/home/MembershipGuideCard';
 import { QuickEntryCard } from '@/components/home/QuickEntryCard';
 import { TaskPlannerCard } from '@/components/home/TaskPlannerCard';
-import { TodayLessonCard } from '@/components/home/TodayLessonCard';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { ReviewReminderModal } from '@/components/review/ReviewReminderModal';
 import { StudyCalendar } from '@/components/studyLog/StudyCalendar';
@@ -56,18 +57,16 @@ function HomePage() {
 
   const homeRequest = useRequest(
     async () => {
-      const [todayArticleResponse, reviewSummary, reviewList, dashboard] =
+      const [pathData, reviewSummary, reviewList, dashboard] =
         await Promise.all([
-          getTodayArticle(),
+          getLearningPath(),
           getTodayReviewSummary(),
           getTodayReviews(),
           getDashboardOverview(),
         ]);
 
       return {
-        todayArticle: todayArticleResponse.has_article
-          ? todayArticleResponse.article
-          : null,
+        pathData,
         reviewSummaryMessage: reviewSummary.message,
         reviewItems: reviewList.items,
         dashboard,
@@ -86,33 +85,36 @@ function HomePage() {
     },
   );
 
+  const { loading: isRealizing, run: startLesson } = useRequest(
+    async (proposal: ArticleProposal) => {
+      if (proposal.status === 'realized' && proposal.article_id) {
+        return { id: proposal.article_id };
+      }
+      return realizeProposal(proposal.id);
+    },
+    {
+      manual: true,
+      onSuccess: (article) => {
+        navigate({
+          to: '/article/$articleId',
+          params: { articleId: String(article.id) },
+        });
+      },
+      onError: (err: Error) => {
+        message.error(err.message || '课程开启失败，请稍后重试');
+      },
+    },
+  );
+
   const learningGoals = useMemo(() => {
     return (user?.learning_goals || []).map(
-      (goal) => GOAL_LABELS[goal] || goal,
+      (goal: string) => GOAL_LABELS[goal] || goal,
     );
   }, [user?.learning_goals]);
 
   const dashboard = homeRequest.data?.dashboard ?? null;
-  const todayArticle = homeRequest.data?.todayArticle ?? null;
+  const pathData = homeRequest.data?.pathData ?? null;
   const reviewItems = homeRequest.data?.reviewItems ?? [];
-
-  const openTodayLesson = () =>
-    navigate({
-      to: '/article/$articleId',
-      params: { articleId: todayArticle ? String(todayArticle.id) : 'today' },
-      search: {},
-    });
-
-  const openLessonChat = () => {
-    if (!todayArticle) {
-      openTodayLesson();
-      return;
-    }
-    navigate({
-      to: '/ai-chat',
-      search: { articleId: todayArticle.id, mode: 'lesson' } as never,
-    });
-  };
 
   const taskItems = [
     {
@@ -128,19 +130,14 @@ function HomePage() {
     },
     {
       key: 'lesson',
-      title: '再学今日课文',
-      description: todayArticle
-        ? todayArticle.is_completed
-          ? '今天的课文已经完成，可以回看或继续问 AI。'
-          : `今天的主课已经准备好：${todayArticle.title}`
-        : '今天的主课还没打开，进入后会自动为你生成。',
-      actionLabel: todayArticle
-        ? todayArticle.is_completed
-          ? '回看课文'
-          : '进入课文'
-        : '开始今天的学习',
-      action: openTodayLesson,
-      status: todayArticle?.is_completed ? 'done' : 'ready',
+      title: '再学主课',
+      description: '点击下方的路径节点，开启你的专属关卡。建议每天至少攻克一个。',
+      actionLabel: '查看学习路径',
+      action: () => {
+        const el = document.getElementById('learning-path-section');
+        el?.scrollIntoView({ behavior: 'smooth' });
+      },
+      status: 'ready',
     },
     {
       key: 'playground',
@@ -166,11 +163,7 @@ function HomePage() {
         <div className="rounded-3xl bg-white px-5 py-4 shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
           <div className="text-sm font-medium text-gray-400">今天日期</div>
           <div className="text-xl font-black text-amber-700">
-            {new Date().toLocaleDateString('zh-CN', {
-              month: 'long',
-              day: 'numeric',
-              weekday: 'long',
-            })}
+            {dayjs().format('M月D日 dddd')}
           </div>
         </div>
       </div>
@@ -199,20 +192,33 @@ function HomePage() {
 
       <Row gutter={[24, 24]}>
         <Col xs={24} xl={16}>
-          <div className="space-y-6">
+          <div className="space-y-8">
             <TaskPlannerCard
               loading={isLoading || homeRequest.loading}
               hasCompletedAssessment={hasCompletedAssessment}
               taskItems={taskItems}
               onStartAssessment={() => setShowAssessment(true)}
             />
-            <TodayLessonCard
-              loading={isLoading || homeRequest.loading}
-              hasCompletedAssessment={hasCompletedAssessment}
-              todayArticle={todayArticle}
-              onOpenTodayLesson={openTodayLesson}
-              onOpenLessonChat={openLessonChat}
-            />
+            
+            <div id="learning-path-section" className="rounded-[40px] bg-slate-50/50 p-4 pt-10 border border-slate-100/50 min-h-[900px]">
+              <div className="text-center mb-10">
+                <Title level={3} className="!mb-2 !font-black !text-slate-800">学习小径</Title>
+                <Text className="text-slate-400">点击当前关卡开始你的英语冒险</Text>
+              </div>
+              {pathData ? (
+                <LearningPath
+                  completedArticles={pathData.completed_articles}
+                  proposals={pathData.proposals}
+                  onNodeClick={startLesson}
+                  isRealizing={isRealizing}
+                />
+              ) : (
+                <div className="h-[600px] flex items-center justify-center">
+                  <Typography.Text className="text-slate-300">正在铺路...</Typography.Text>
+                </div>
+              )}
+            </div>
+            
             <StudyCalendar />
           </div>
         </Col>

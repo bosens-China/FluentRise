@@ -1,5 +1,5 @@
 """
-错题本模型
+错题本模型。
 """
 
 from __future__ import annotations
@@ -18,10 +18,12 @@ if TYPE_CHECKING:
 
 
 class MistakeBookEntry(Base):
-    """用户错题本条目。"""
+    """用户错题记录。"""
 
     __tablename__ = "mistake_book_entries"
-    __table_args__ = (UniqueConstraint("user_id", "item_type", "target_text", name="uq_mistake_item"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "item_type", "target_text", name="uq_mistake_item"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(
@@ -31,32 +33,24 @@ class MistakeBookEntry(Base):
         index=True,
         comment="用户 ID",
     )
-    source_type: Mapped[str] = mapped_column(
-        String(30),
-        nullable=False,
-        comment="来源类型：playground/article/review",
-    )
-    item_type: Mapped[str] = mapped_column(
-        String(30),
-        nullable=False,
-        comment="项目类型：word/exercise/sentence",
-    )
+    source_type: Mapped[str] = mapped_column(String(30), nullable=False, comment="来源类型")
+    item_type: Mapped[str] = mapped_column(String(30), nullable=False, comment="题目类型")
     target_text: Mapped[str] = mapped_column(
         String(500),
         nullable=False,
-        comment="目标答案或目标内容",
+        comment="目标答案",
     )
-    prompt_text: Mapped[str | None] = mapped_column(Text, nullable=True, comment="题干或提示")
-    last_user_answer: Mapped[str | None] = mapped_column(Text, nullable=True, comment="最近一次答案")
-    context_text: Mapped[str | None] = mapped_column(Text, nullable=True, comment="上下文内容")
+    prompt_text: Mapped[str | None] = mapped_column(Text, nullable=True, comment="题干")
+    last_user_answer: Mapped[str | None] = mapped_column(Text, nullable=True, comment="最近答案")
+    context_text: Mapped[str | None] = mapped_column(Text, nullable=True, comment="上下文")
     payload: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata",
         JSON,
         nullable=True,
         comment="补充信息",
     )
-    mistake_count: Mapped[int] = mapped_column(Integer, default=1, comment="累计错误次数")
-    correct_count: Mapped[int] = mapped_column(Integer, default=0, comment="累计纠正次数")
+    mistake_count: Mapped[int] = mapped_column(Integer, default=1, comment="错误次数")
+    correct_count: Mapped[int] = mapped_column(Integer, default=0, comment="纠正次数")
     is_mastered: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否掌握")
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

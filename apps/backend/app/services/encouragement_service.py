@@ -22,16 +22,28 @@ class EncouragementResult(BaseModel):
 
 FALLBACK_MESSAGES: dict[str, list[EncouragementResult]] = {
     "lesson": [
-        EncouragementResult(zh="今天这节课学得很扎实。", en="You worked through today's lesson with steady focus."),
-        EncouragementResult(zh="这一点点积累很珍贵。", en="This small step matters more than it looks."),
+        EncouragementResult(
+            zh="今天这节课学得很扎实。", en="You worked through today's lesson with steady focus."
+        ),
+        EncouragementResult(
+            zh="这一点点积累很珍贵。", en="This small step matters more than it looks."
+        ),
     ],
     "playground": [
-        EncouragementResult(zh="这一轮练习完成得很不错。", en="You handled this practice round really well."),
-        EncouragementResult(zh="刚刚的投入很有价值。", en="The effort you just gave really counts."),
+        EncouragementResult(
+            zh="这一轮练习完成得很不错。", en="You handled this practice round really well."
+        ),
+        EncouragementResult(
+            zh="刚刚的投入很有价值。", en="The effort you just gave really counts."
+        ),
     ],
     "review": [
-        EncouragementResult(zh="愿意回来复习，本身就很棒。", en="Coming back to review is already a strong move."),
-        EncouragementResult(zh="记忆正在一点点变稳。", en="Your memory is getting steadier step by step."),
+        EncouragementResult(
+            zh="愿意回来复习，本身就很棒。", en="Coming back to review is already a strong move."
+        ),
+        EncouragementResult(
+            zh="记忆正在一点点变稳。", en="Your memory is getting steadier step by step."
+        ),
     ],
 }
 

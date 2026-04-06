@@ -1,13 +1,11 @@
 /**
  * 认证相关 API。
+ *
+ * 这一层只负责请求，不处理本地副作用。
  */
+
 import type { UserInfo } from '@/api/user';
-import {
-  clearTokens,
-  getRefreshToken,
-  setStoredUserInfo,
-  setTokens,
-} from '@/lib/auth-storage';
+import { getRefreshToken } from '@/lib/auth-storage';
 import { post } from '@/utils/request';
 
 export interface SendSmsCodeRequest {
@@ -36,10 +34,6 @@ export interface LoginResponse {
   tokens: TokenResponse;
 }
 
-export interface RefreshTokenRequest {
-  refresh_token: string;
-}
-
 export interface LogoutRequest {
   refresh_token?: string;
 }
@@ -59,14 +53,7 @@ export async function sendSmsCode(
 export async function loginByPhone(
   data: PhoneLoginRequest,
 ): Promise<LoginResponse> {
-  const response = await post<LoginResponse>('/auth/login/phone', data);
-
-  if (response.tokens) {
-    setTokens(response.tokens.access_token, response.tokens.refresh_token);
-    setStoredUserInfo(response.user);
-  }
-
-  return response;
+  return post<LoginResponse>('/auth/login/phone', data);
 }
 
 export async function logout(): Promise<MessageResponse> {
@@ -76,11 +63,8 @@ export async function logout(): Promise<MessageResponse> {
     : {};
 
   try {
-    const response = await post<MessageResponse>('/auth/logout', payload);
-    clearTokens();
-    return response;
+    return await post<MessageResponse>('/auth/logout', payload);
   } catch {
-    clearTokens();
     return { message: '退出登录成功' };
   }
 }

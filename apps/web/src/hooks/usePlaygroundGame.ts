@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useRequest } from 'ahooks';
 
 import {
   getPlaygroundQuestions,
@@ -87,29 +87,19 @@ export function usePlaygroundGame(options: UsePlaygroundGameOptions = {}) {
     };
   }, [clearPendingTimeouts, stopAudioPlayback]);
 
-  const questionsQuery = useQuery({
-    queryKey: ['playground', 'questions'],
-    queryFn: getPlaygroundQuestions,
+  const questionsRequest = useRequest(getPlaygroundQuestions, {
+    onSuccess: (data) => {
+      setGameState(createInitialGameState(data.questions));
+      setStartTime(Date.now());
+      setCurrentTime(Date.now());
+    },
+    onError: (error) => {
+      toast.error(error.message || '训练题目加载失败');
+    },
   });
 
-  useEffect(() => {
-    if (!questionsQuery.data) {
-      return;
-    }
-
-    setGameState(createInitialGameState(questionsQuery.data.questions));
-    setStartTime(Date.now());
-    setCurrentTime(Date.now());
-  }, [questionsQuery.data]);
-
-  useEffect(() => {
-    if (questionsQuery.error instanceof Error) {
-      toast.error(questionsQuery.error.message || '训练题目加载失败');
-    }
-  }, [questionsQuery.error]);
-
-  const submitMutation = useMutation({
-    mutationFn: submitPracticeResult,
+  const submitRequest = useRequest(submitPracticeResult, {
+    manual: true,
     onSuccess: (data) => {
       setSubmitResult({
         total: data.total,
@@ -222,7 +212,7 @@ export function usePlaygroundGame(options: UsePlaygroundGameOptions = {}) {
           },
         );
 
-        submitMutation.mutate({
+        void submitRequest.run({
           answers,
           duration_seconds: durationSeconds,
           max_streak: nextGameState.maxStreak,
@@ -237,7 +227,7 @@ export function usePlaygroundGame(options: UsePlaygroundGameOptions = {}) {
         });
       });
     },
-    [durationSeconds, submitMutation],
+    [durationSeconds, submitRequest],
   );
 
   const updateCurrentInput = useCallback(
@@ -322,8 +312,8 @@ export function usePlaygroundGame(options: UsePlaygroundGameOptions = {}) {
     setGameState(createInitialGameState());
     setStartTime(Date.now());
     setCurrentTime(Date.now());
-    await questionsQuery.refetch();
-  }, [clearPendingTimeouts, questionsQuery]);
+    await questionsRequest.refreshAsync();
+  }, [clearPendingTimeouts, questionsRequest]);
 
   return {
     currentQuestion: currentQuestion ?? null,
@@ -334,8 +324,8 @@ export function usePlaygroundGame(options: UsePlaygroundGameOptions = {}) {
     maxStreak: gameState.maxStreak,
     progress,
     durationText: formatDurationText(durationSeconds),
-    isLoading: questionsQuery.isPending && gameState.questions.length === 0,
-    isEmpty: !questionsQuery.isPending && gameState.questions.length === 0,
+    isLoading: questionsRequest.loading && gameState.questions.length === 0,
+    isEmpty: !questionsRequest.loading && gameState.questions.length === 0,
     isPlaying: isAudioPlaying || isSpeakingFallback,
     showCompleteModal,
     submitResult,

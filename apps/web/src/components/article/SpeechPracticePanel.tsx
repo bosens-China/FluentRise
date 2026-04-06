@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from 'react';
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AudioOutlined,
   LoadingOutlined,
@@ -46,7 +46,7 @@ export function SpeechPracticePanel({
 }: SpeechPracticePanelProps) {
   const { message } = App.useApp();
   const [result, setResult] = useState<SpeechAnalyzeResponse | null>(null);
-  const [submittedKey, setSubmittedKey] = useState<string | null>(null);
+  const submittedKeyRef = useRef<string | null>(null);
   const referenceText = useMemo(
     () => article.content.map((item) => item.en).join(' '),
     [article.content],
@@ -78,13 +78,6 @@ export function SpeechPracticePanel({
   });
 
   useEffect(() => {
-    resetRecording();
-    setResult(null);
-    setSubmittedKey(null);
-    onResultChange?.(null);
-  }, [article.id, onResultChange, resetRecording]);
-
-  useEffect(() => {
     if (!errorMessage) {
       return;
     }
@@ -97,17 +90,17 @@ export function SpeechPracticePanel({
     }
 
     const currentKey = `${recordedFile.size}-${recordedFile.lastModified}`;
-    if (submittedKey === currentKey) {
+    if (submittedKeyRef.current === currentKey) {
       return;
     }
 
-    setSubmittedKey(currentKey);
+    submittedKeyRef.current = currentKey;
     void analyzeRequest.run({
       file: recordedFile,
       language: 'en',
       referenceText,
     });
-  }, [analyzeRequest, recordedFile, referenceText, status, submittedKey]);
+  }, [analyzeRequest, recordedFile, referenceText, status]);
 
   useEffect(() => {
     if (status === 'recording' && remainingSeconds === 0) {
@@ -117,7 +110,7 @@ export function SpeechPracticePanel({
 
   const handleStart = async () => {
     setResult(null);
-    setSubmittedKey(null);
+    submittedKeyRef.current = null;
     onResultChange?.(null);
     await startRecording();
   };
@@ -263,7 +256,7 @@ export function SpeechPracticePanel({
             onClick={() => {
               resetRecording();
               setResult(null);
-              setSubmittedKey(null);
+              submittedKeyRef.current = null;
               onResultChange?.(null);
             }}
           >

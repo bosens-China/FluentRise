@@ -15,7 +15,7 @@ interface ReviewProgressBarProps {
 
 export function ReviewProgressBar({
   currentStage,
-  totalStages = 7,
+  totalStages = 9,
   nextReviewDate,
   completed = false,
 }: ReviewProgressBarProps) {
@@ -38,7 +38,7 @@ export function ReviewProgressBar({
             </div>
             <div className="text-sm text-gray-500">
               {completed 
-                ? '已完成全部7轮复习，内容已牢固掌握' 
+                ? '已完成全部9轮复习，内容已牢固掌握' 
                 : `第 ${currentStage}/${totalStages} 轮复习 · 艾宾浩斯遗忘曲线`
               }
             </div>

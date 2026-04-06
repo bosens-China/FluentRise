@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   createFileRoute,
   useNavigate,
@@ -7,7 +7,6 @@ import {
 import { App, Button, Result, Spin, Typography } from 'antd';
 
 import {
-  generateArticleAudio,
   generateTodayArticle,
   getArticleDetail,
   type Article,
@@ -30,8 +29,9 @@ import {
   ArticleReader,
 } from '@/components/article';
 import type { FeedbackReason } from '@/components/article/ArticlePageModals';
-import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 import { useMutation, useQuery } from '@/hooks/useData';
+
+import { useArticleReviewAudio } from './useArticleReviewAudio';
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -44,16 +44,30 @@ function ArticlePage() {
   const search = useSearch({ from: '/article/$articleId' }) as {
     review?: number | string;
   };
+  const scheduleId = search.review ? Number(search.review) : null;
+
+  return (
+    <ArticlePageScreen
+      key={`${articleId}:${scheduleId ?? 'lesson'}`}
+      articleId={articleId}
+      scheduleId={scheduleId}
+    />
+  );
+}
+
+interface ArticlePageScreenProps {
+  articleId: string;
+  scheduleId: number | null;
+}
+
+function ArticlePageScreen({
+  articleId,
+  scheduleId,
+}: ArticlePageScreenProps) {
   const navigate = useNavigate();
   const { message } = App.useApp();
   const isToday = articleId === 'today';
-  const scheduleId = search.review ? Number(search.review) : null;
   const isReviewMode = Boolean(scheduleId);
-  const {
-    play: playReviewAudioFile,
-    stop: stopReviewAudio,
-    isPlaying: reviewAudioPlaying,
-  } = useAudioPlayer();
 
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackReason, setFeedbackReason] =
@@ -72,37 +86,13 @@ function ArticlePage() {
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [reviewStage, setReviewStage] = useState<number | null>(null);
   const [reviewCompleted, setReviewCompleted] = useState(false);
-  const [reviewAudioUrl, setReviewAudioUrl] = useState<string | null>(null);
-  const [reviewAudioLoading, setReviewAudioLoading] = useState(false);
-  const [exerciseSummary, setExerciseSummary] = useState<{
+  const [exerciseSummary] = useState<{
     correct: number;
     total: number;
     results: ExerciseResultItem[];
   } | null>(null);
   const [reviewStartTime] = useState(() => (isReviewMode ? Date.now() : 0));
   const [reviewEndTime, setReviewEndTime] = useState<number | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (reviewAudioUrl) {
-        URL.revokeObjectURL(reviewAudioUrl);
-      }
-    };
-  }, [reviewAudioUrl]);
-
-  useEffect(() => {
-    setPreviewAssessment(undefined);
-    setShowPreviewModal(false);
-    setShowWakeupPrompt(false);
-    setReviewCompleted(false);
-    setReviewStage(null);
-    if (reviewAudioUrl) {
-      URL.revokeObjectURL(reviewAudioUrl);
-      setReviewAudioUrl(null);
-    }
-    stopReviewAudio();
-    setReviewAudioLoading(false);
-  }, [articleId, isReviewMode, reviewAudioUrl, stopReviewAudio]);
 
   const durationSeconds = useMemo(() => {
     if (!isReviewMode || !reviewEndTime) {
@@ -136,9 +126,7 @@ function ArticlePage() {
     {
       refreshDeps: [articleId, isToday],
       onError: () => {
-        message.error(
-          isToday ? '今日课文生成失败，请稍后重试' : '课文加载失败',
-        );
+        message.error(isToday ? '今日课文生成失败，请稍后重试' : '课文加载失败');
       },
     },
   );
@@ -162,41 +150,22 @@ function ArticlePage() {
 
   const currentArticle = articleRequest.data as Article | undefined;
 
-  const playReviewAudio = async () => {
-    if (!currentArticle) {
-      return;
-    }
-
-    try {
-      setReviewAudioLoading(true);
-      let nextUrl = reviewAudioUrl;
-      if (!nextUrl) {
-        nextUrl = await generateArticleAudio(currentArticle.id);
-        setReviewAudioUrl((previous) => {
-          if (previous) {
-            URL.revokeObjectURL(previous);
-          }
-          return nextUrl;
-        });
-      }
-
-      await playReviewAudioFile(nextUrl, {
-        onError: () => {
-          message.error('课文音频播放失败，请稍后重试');
-        },
-      });
-    } catch {
-      message.error('课文音频生成失败，请稍后重试');
-    } finally {
-      setReviewAudioLoading(false);
-    }
-  };
+  const {
+    playReviewAudio,
+    reviewAudioLoading,
+    reviewAudioPlaying,
+  } = useArticleReviewAudio({
+    articleId,
+    currentArticle,
+    isReviewMode,
+  });
 
   const updateProgressRequest = useMutation(
     async (
       progress: number,
       completed: boolean,
       results?: ExerciseResultItem[],
+      needsRepeat?: boolean,
     ) => {
       if (!articleRequest.data) {
         return null;
@@ -206,6 +175,7 @@ function ArticlePage() {
         progress,
         completed,
         results,
+        needsRepeat,
       );
     },
     {
@@ -249,7 +219,7 @@ function ArticlePage() {
       }),
     {
       onSuccess: () => {
-        message.success('已经根据你的反馈重新生成今天的课文');
+        message.success('已经根据你的反馈重新生成今天的课文。');
         setFeedbackOpen(false);
         setFeedbackComment('');
         void articleRequest.refresh();
@@ -269,17 +239,6 @@ function ArticlePage() {
     }
     return { defaultShowChinese: true, quickMode: false };
   }, [previewAssessment]);
-
-  const handleExerciseUpdate = useCallback(
-    (summary: {
-      correct: number;
-      total: number;
-      results: ExerciseResultItem[];
-    }) => {
-      setExerciseSummary(summary);
-    },
-    [],
-  );
 
   if (articleRequest.loading) {
     return (
@@ -347,16 +306,19 @@ function ArticlePage() {
         />
 
         <ArticleReader
+          key={currentArticle.id}
           article={currentArticle}
-          isReviewMode={isReviewMode}
-          defaultShowChinese={reviewState.defaultShowChinese}
-          onProgressUpdate={(progress, completed, results) => {
-            void updateProgressRequest.run(progress, completed, results);
+          onProgressUpdate={(progress, completed, results, needsRepeat) => {
+            void updateProgressRequest.run(progress, completed, results, needsRepeat);
           }}
-          onExerciseUpdate={handleExerciseUpdate}
           onComplete={() => {
             setReviewEndTime(Date.now());
-            setShowCompleteModal(true);
+            if (isReviewMode) {
+              setShowCompleteModal(true);
+            } else {
+              message.success('恭喜完成本课学习！');
+              navigate({ to: '/' });
+            }
           }}
         />
       </div>

@@ -83,7 +83,7 @@ class SentenceHelperService:
                     "如果原句已经很简单，也要告诉用户为什么简单、重点在哪里。"
                     "解释要让用户看完就能模仿，不要输出过长段落。"
                     "更简单版本必须保持原意，但可以更口语、更短。"
-                    "pattern 字段请给出一句可以复用的骨架，例如：I am + 身份。"
+                    "pattern 字段请给出一句可以复用的骨架，例如：I am + 身份。",
                 ),
                 (
                     "user",
@@ -121,7 +121,9 @@ class SentenceHelperService:
 
         parts = [
             item.strip()
-            for item in re.split(r"(?<=[,.!?;])\s+|\s+(?:and|but|because|when|after|before)\s+", sentence)
+            for item in re.split(
+                r"(?<=[,.!?;])\s+|\s+(?:and|but|because|when|after|before)\s+", sentence
+            )
             if item.strip()
         ]
         if not parts:

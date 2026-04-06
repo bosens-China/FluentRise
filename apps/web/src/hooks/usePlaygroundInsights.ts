@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useRequest } from 'ahooks';
+import { useCallback, useMemo, useState } from 'react';
 
 import {
   getPracticeHistory,
@@ -13,71 +13,86 @@ const HISTORY_PAGE_SIZE = 8;
 
 export function usePlaygroundInsights() {
   const [showInsightsDrawer, setShowInsightsDrawer] = useState(false);
+  const [practiceHistory, setPracticeHistory] = useState<PracticeSession[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
 
-  const statsQuery = useQuery({
-    queryKey: ['playground', 'stats'],
-    queryFn: getPracticeStats,
-    enabled: showInsightsDrawer,
-  });
-
-  const historyQuery = useInfiniteQuery({
-    queryKey: ['playground', 'history', HISTORY_PAGE_SIZE],
-    initialPageParam: 1,
-    queryFn: ({ pageParam }) =>
-      getPracticeHistory(pageParam, HISTORY_PAGE_SIZE),
-    enabled: showInsightsDrawer,
-    getNextPageParam: (lastPage, allPages) => {
-      const loadedCount = allPages.reduce(
-        (total, page) => total + page.sessions.length,
-        0,
-      );
-      return loadedCount < lastPage.total ? allPages.length + 1 : undefined;
+  const statsRequest = useRequest(getPracticeStats, {
+    manual: true,
+    onError: (error) => {
+      toast.error(error.message || '加载训练统计失败');
     },
   });
 
-  useEffect(() => {
-    if (statsQuery.error instanceof Error) {
-      toast.error(statsQuery.error.message || '加载训练统计失败');
-    }
-  }, [statsQuery.error]);
-
-  useEffect(() => {
-    if (historyQuery.error instanceof Error) {
-      toast.error(historyQuery.error.message || '加载训练记录失败');
-    }
-  }, [historyQuery.error]);
-
-  const practiceHistory = useMemo<PracticeSession[]>(
-    () => historyQuery.data?.pages.flatMap((page) => page.sessions) ?? [],
-    [historyQuery.data],
+  const historyRequest = useRequest(
+    async (page: number) => getPracticeHistory(page, HISTORY_PAGE_SIZE),
+    {
+      manual: true,
+      onError: (error) => {
+        toast.error(error.message || '加载训练记录失败');
+      },
+    },
   );
 
-  const historyTotal = historyQuery.data?.pages[0]?.total ?? 0;
+  const practiceStats = useMemo<PracticeStats | null>(
+    () => (statsRequest.data ?? null) as PracticeStats | null,
+    [statsRequest.data],
+  );
+
+  const syncHistory = useCallback(
+    (
+      page: number,
+      nextSessions: PracticeSession[],
+      total: number,
+      mode: 'replace' | 'append',
+    ) => {
+      setHistoryPage(page);
+      setHistoryTotal(total);
+      setPracticeHistory((previous) => {
+        const merged =
+          mode === 'replace' ? nextSessions : [...previous, ...nextSessions];
+        setHasMoreHistory(merged.length < total);
+        return merged;
+      });
+    },
+    [],
+  );
 
   const refreshInsights = useCallback(async () => {
-    await Promise.all([statsQuery.refetch(), historyQuery.refetch()]);
-  }, [historyQuery, statsQuery]);
+    const [, history] = await Promise.all([
+      statsRequest.runAsync(),
+      historyRequest.runAsync(1),
+    ]);
+    syncHistory(1, history.sessions, history.total, 'replace');
+  }, [historyRequest, statsRequest, syncHistory]);
 
-  const openInsights = useCallback(() => {
+  const openInsights = useCallback(async () => {
     setShowInsightsDrawer(true);
-  }, []);
-
-  const loadMoreHistory = useCallback(async () => {
-    if (!historyQuery.hasNextPage || historyQuery.isFetchingNextPage) {
+    if (statsRequest.data && historyTotal > 0) {
       return;
     }
-    await historyQuery.fetchNextPage();
-  }, [historyQuery]);
+    await refreshInsights();
+  }, [historyTotal, refreshInsights, statsRequest.data]);
+
+  const loadMoreHistory = useCallback(async () => {
+    if (!hasMoreHistory || historyRequest.loading) {
+      return;
+    }
+    const nextPage = historyPage + 1;
+    const history = await historyRequest.runAsync(nextPage);
+    syncHistory(nextPage, history.sessions, history.total, 'append');
+  }, [hasMoreHistory, historyPage, historyRequest, syncHistory]);
 
   return {
     showInsightsDrawer,
     setShowInsightsDrawer,
-    practiceStats: (statsQuery.data ?? null) as PracticeStats | null,
+    practiceStats,
     practiceHistory,
-    historyPage: historyQuery.data?.pages.length ?? 1,
-    hasMoreHistory: Boolean(historyQuery.hasNextPage),
-    statsLoading: statsQuery.isPending || statsQuery.isFetching,
-    historyLoading: historyQuery.isPending || historyQuery.isFetchingNextPage,
+    historyPage,
+    hasMoreHistory,
+    statsLoading: statsRequest.loading,
+    historyLoading: historyRequest.loading,
     openInsights,
     refreshInsights,
     loadMoreHistory,

@@ -21,13 +21,13 @@ from app.services.question_generator_sources import QuestionMaterialCollector
 class QuestionGenerator:
     """优先基于今日内容、错题本与历史内容生成题目。"""
 
-    TARGET_COUNT = 50
+    TARGET_COUNT = 15
     TYPE_DISTRIBUTION = {
-        QuestionType.AUDIO: 14,
-        QuestionType.MEANING: 12,
-        QuestionType.FILL_BLANK: 10,
-        QuestionType.CONTEXT_CLOZE: 8,
-        QuestionType.SENTENCE_DICTATION: 6,
+        QuestionType.AUDIO: 4,
+        QuestionType.MEANING: 4,
+        QuestionType.FILL_BLANK: 3,
+        QuestionType.CONTEXT_CLOZE: 2,
+        QuestionType.SENTENCE_DICTATION: 2,
     }
     DEFAULT_VOICE = "en-US-ChristopherNeural"
 

@@ -2,13 +2,15 @@
 认证服务。
 """
 
+from __future__ import annotations
+
 import logging
 from secrets import compare_digest
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.exceptions import TooManyRequestsError, UnauthorizedError
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -16,6 +18,7 @@ from app.core.security import (
     generate_sms_code,
     generate_token_id,
 )
+from app.core.time import utc_now
 from app.db.redis import (
     delete_sms_code,
     get_refresh_token_owner,
@@ -26,6 +29,7 @@ from app.db.redis import (
     store_refresh_token,
 )
 from app.models.user import User
+from app.repositories.user_repository import get_user_by_id, get_user_by_phone
 from app.schemas.user import LoginResponse, TokenResponse, UserInfo
 from app.services.membership_service import membership_service
 
@@ -34,30 +38,27 @@ REFRESH_TOKEN_EXPIRE_SECONDS = settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60
 
 
 class AuthService:
-    """认证服务类。"""
+    """认证服务。"""
 
     DEV_SMS_CODE = "123456"
 
     @staticmethod
-    async def send_sms_code(phone: str) -> tuple[bool, str | None]:
-        """发送短信验证码。"""
+    async def send_sms_code(phone: str) -> None:
         if await is_code_sent_recently(phone):
-            return False, "发送过于频繁，请稍后再试"
+            raise TooManyRequestsError("发送过于频繁，请稍后再试")
 
         if settings.ENVIRONMENT == "development":
             code = AuthService.DEV_SMS_CODE
             await set_sms_code(phone, code, settings.SMS_CODE_EXPIRE_SECONDS)
             logger.info("开发环境验证码已生成，手机号=%s，验证码=%s", phone, code)
-            return True, None
+            return
 
         code = generate_sms_code(settings.SMS_CODE_LENGTH)
         await set_sms_code(phone, code, settings.SMS_CODE_EXPIRE_SECONDS)
         logger.info("验证码已生成并等待短信服务发送，手机号=%s", phone)
-        return True, None
 
     @staticmethod
     async def verify_sms_code(phone: str, code: str) -> bool:
-        """验证短信验证码。"""
         if settings.ENVIRONMENT == "development" and code == AuthService.DEV_SMS_CODE:
             await delete_sms_code(phone)
             return True
@@ -73,36 +74,28 @@ class AuthService:
         return False
 
     @staticmethod
-    async def get_or_create_user(db: AsyncSession, phone: str) -> User:
-        """获取或创建用户。"""
-        result = await db.execute(select(User).where(User.phone == phone))
-        user = result.scalar_one_or_none()
+    async def get_or_create_user(*, db: AsyncSession, phone: str) -> User:
+        user = await get_user_by_phone(db, phone=phone)
 
         if user is None:
-            user = User(
-                phone=phone,
-                is_active=True,
-                is_verified=True,
-            )
+            user = User(phone=phone, is_active=True, is_verified=True)
             db.add(user)
             await db.commit()
             await db.refresh(user)
         else:
-            user.last_login_at = func.now()
+            user.last_login_at = utc_now()
             await db.commit()
             await db.refresh(user)
 
-        await membership_service.ensure_membership(db, user.id)
+        await membership_service.ensure_membership(db=db, user_id=user.id)
         return user
 
     @staticmethod
-    async def login_by_phone(db: AsyncSession, phone: str, code: str) -> LoginResponse | None:
-        """手机号验证码登录。"""
-        is_valid = await AuthService.verify_sms_code(phone, code)
-        if not is_valid:
-            return None
+    async def login_by_phone(*, db: AsyncSession, phone: str, code: str) -> LoginResponse:
+        if not await AuthService.verify_sms_code(phone, code):
+            raise UnauthorizedError("验证码错误或已过期")
 
-        user = await AuthService.get_or_create_user(db, phone)
+        user = await AuthService.get_or_create_user(db=db, phone=phone)
         token_data = {"sub": str(user.id), "phone": user.phone}
 
         access_token = create_access_token(token_data)
@@ -120,30 +113,28 @@ class AuthService:
         )
 
     @staticmethod
-    async def refresh_tokens(db: AsyncSession, refresh_token: str) -> TokenResponse | None:
-        """刷新访问令牌。"""
+    async def refresh_tokens(*, db: AsyncSession, refresh_token: str) -> TokenResponse:
         payload = decode_token(refresh_token)
         if not payload or payload.get("type") != "refresh":
-            return None
+            raise UnauthorizedError("无效的刷新令牌")
 
         user_id = payload.get("sub")
         phone = payload.get("phone")
         refresh_jti = payload.get("jti")
 
         if not isinstance(user_id, str) or not user_id:
-            return None
+            raise UnauthorizedError("无效的刷新令牌")
         if not isinstance(refresh_jti, str) or not refresh_jti:
-            return None
+            raise UnauthorizedError("无效的刷新令牌")
 
         refresh_owner = await get_refresh_token_owner(refresh_jti)
         if refresh_owner != user_id:
-            return None
+            raise UnauthorizedError("无效的刷新令牌")
 
-        result = await db.execute(select(User).where(User.id == int(user_id)))
-        user = result.scalar_one_or_none()
+        user = await get_user_by_id(db, user_id=int(user_id))
         if user is None or not user.is_active:
             await revoke_refresh_token(refresh_jti)
-            return None
+            raise UnauthorizedError("无效的刷新令牌")
 
         token_data = {"sub": str(user.id), "phone": user.phone or phone}
         new_access_token = create_access_token(token_data)
@@ -161,7 +152,6 @@ class AuthService:
 
     @staticmethod
     async def logout(refresh_token: str | None) -> None:
-        """注销当前刷新令牌。"""
         if not refresh_token:
             return
 

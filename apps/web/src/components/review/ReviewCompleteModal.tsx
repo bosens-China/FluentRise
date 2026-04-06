@@ -120,7 +120,7 @@ export function ReviewCompleteModal({
         
         <div className="mb-6">
           <Tag color="indigo" className="rounded-full px-4 py-1 font-bold text-base">
-            第 {currentStage}/7 轮复习
+            第 {currentStage}/9 轮复习
           </Tag>
         </div>
 

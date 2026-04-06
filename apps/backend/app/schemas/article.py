@@ -8,6 +8,8 @@ import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.pagination import PaginatedItemsResponse
+
 
 class BilingualContent(BaseModel):
     """双语段落内容。"""
@@ -107,6 +109,7 @@ class ArticleResponse(BaseModel):
     exercises: list[Exercise] | None
     is_read: int
     is_completed: bool
+    needs_repeat: bool
     created_at: datetime.datetime
 
     model_config = {"from_attributes": True}
@@ -120,16 +123,14 @@ class ArticleListItem(BaseModel):
     publish_date: datetime.date
     level: int
     is_completed: bool
+    needs_repeat: bool
     created_at: datetime.datetime
 
     model_config = {"from_attributes": True}
 
 
-class ArticleListResponse(BaseModel):
+class ArticleListResponse(PaginatedItemsResponse[ArticleListItem]):
     """文章列表响应。"""
-
-    items: list[ArticleListItem]
-    total: int
 
 
 class TodayArticleResponse(BaseModel):
@@ -162,18 +163,37 @@ class UpdateProgressRequest(BaseModel):
 
     is_read: int = Field(..., ge=0, le=100, description="阅读进度")
     is_completed: bool | None = Field(None, description="是否完成")
+    needs_repeat: bool | None = Field(None, description="是否需要明天重学(软失败)")
     exercise_results: list[ExerciseResultItem] | None = Field(None, description="练习结果")
 
 
-class RegenerateArticleRequest(BaseModel):
-    """文章重生成反馈。"""
+class MiniStoryQuestionResponse(BaseModel):
+    """小故事问题。"""
 
-    feedback_reason: str = Field(..., description="反馈原因")
-    feedback_comment: str | None = Field(None, description="补充说明")
+    id: str = Field(..., description="问题 ID")
+    question_en: str = Field(..., description="英文问题")
+    question_zh: str = Field(..., description="中文翻译")
 
 
-class SubmitExerciseRequest(BaseModel):
-    """提交单题练习答案。"""
+class MiniStoryResponse(BaseModel):
+    """变种小故事响应。"""
 
-    exercise_index: int = Field(..., ge=0, description="题目索引")
-    answer: str = Field(..., description="用户答案")
+    story_en: str = Field(..., description="小故事英文")
+    story_zh: str = Field(..., description="小故事中文")
+    questions: list[MiniStoryQuestionResponse] = Field(default_factory=list, description="相关问题")
+
+
+class MiniStoryEvaluateRequest(BaseModel):
+    """校验小故事概述/问答请求。"""
+
+    story_en: str = Field(..., description="小故事原文")
+    questions: list[dict[str, str]] = Field(..., description="问题列表 (必须包含 id, question_en)")
+    answers: dict[str, str] = Field(..., description="用户答案 (question_id -> user_answer)")
+
+
+class MiniStoryEvaluateResponse(BaseModel):
+    """小故事校验结果。"""
+
+    is_passed: bool = Field(..., description="是否及格")
+    score: int = Field(..., description="评分 (0-100)")
+    feedback_zh: str = Field(..., description="老师鼓励和反馈")

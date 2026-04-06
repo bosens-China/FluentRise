@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * 轻量级 Toast 通知系统
  * 替代 antd 的 message 组件

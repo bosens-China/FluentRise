@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { NoteListNew } from '@/components/note/NoteListNew';
+import { NoteList } from '@/components/note/NoteList';
 import { AuthGuard } from '@/components/providers';
 
 export const Route = createFileRoute('/notes')({
@@ -20,7 +20,7 @@ function NotesPage() {
           </p>
         </div>
 
-        <NoteListNew hideTitle />
+        <NoteList hideTitle />
       </DashboardLayout>
     </AuthGuard>
   );

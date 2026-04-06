@@ -1,120 +1,66 @@
-from typing import Any
+"""
+笔记相关路由。
+"""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import desc, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from __future__ import annotations
 
-from app.api.deps import get_current_user
-from app.db.database import get_db
-from app.models.note import Note
+from fastapi import APIRouter, Query
+
+from app.api.deps import CurrentUser, DbSession, LargePagination
 from app.schemas.note import NoteCreate, NoteListResponse, NoteResponse, NoteUpdate
-from app.schemas.user import UserInfo
+from app.schemas.user import MessageResponse
+from app.services.note_service import note_service
 
 router = APIRouter(prefix="/notes", tags=["笔记"])
 
 
-@router.post("", response_model=NoteResponse)
+@router.post("", response_model=NoteResponse, summary="创建笔记")
 async def create_note(
     note_in: NoteCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
-) -> Any:
-    """创建笔记"""
-    note = Note(
-        user_id=current_user.id,
-        article_id=note_in.article_id,
-        title=note_in.title,
-        content=note_in.content,
-    )
-    db.add(note)
-    await db.commit()
-    await db.refresh(note)
-    return note
+    db: DbSession,
+    current_user: CurrentUser,
+) -> NoteResponse:
+    note = await note_service.create(db=db, user_id=current_user.id, obj=note_in)
+    return NoteResponse.model_validate(note)
 
 
-@router.get("", response_model=NoteListResponse)
+@router.get("", response_model=NoteListResponse, summary="获取笔记列表")
 async def get_notes(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    pagination: LargePagination,
+    db: DbSession,
+    current_user: CurrentUser,
     article_id: int | None = Query(None, description="按文章筛选"),
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
-) -> Any:
-    """获取笔记列表"""
-    offset = (page - 1) * page_size
-
-    # 构建查询
-    query = select(Note).where(Note.user_id == current_user.id)
-    if article_id:
-        query = query.where(Note.article_id == article_id)
-
-    # 计算总数
-    count_query = select(func.count()).select_from(query.subquery())
-    total = await db.scalar(count_query) or 0
-
-    # 获取列表 (预加载 article 以获取标题)
-    query = (
-        query.options(selectinload(Note.article))
-        .order_by(desc(Note.created_at))
-        .offset(offset)
-        .limit(page_size)
+) -> NoteListResponse:
+    return await note_service.get_list(
+        db=db,
+        user_id=current_user.id,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        article_id=article_id,
     )
-    result = await db.execute(query)
-    notes = result.scalars().all()
-
-    # 构造响应，手动填充 article_title
-    items = []
-    for note in notes:
-        item = NoteResponse.model_validate(note)
-        if note.article:
-            item.article_title = note.article.title
-        items.append(item)
-
-    return NoteListResponse(items=items, total=total)
 
 
-@router.patch("/{note_id}", response_model=NoteResponse)
+@router.patch("/{note_id}", response_model=NoteResponse, summary="更新笔记")
 async def update_note(
     note_id: int,
     note_in: NoteUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
-) -> Any:
-    """更新笔记"""
-    result = await db.execute(
-        select(Note).where(Note.id == note_id, Note.user_id == current_user.id)
+    db: DbSession,
+    current_user: CurrentUser,
+) -> NoteResponse:
+    note = await note_service.update(
+        db=db,
+        user_id=current_user.id,
+        note_id=note_id,
+        obj=note_in,
     )
-    note = result.scalar_one_or_none()
-
-    if not note:
-        raise HTTPException(status_code=404, detail="笔记不存在")
-
-    if note_in.title is not None:
-        note.title = note_in.title
-    if note_in.content is not None:
-        note.content = note_in.content
-
-    await db.commit()
-    await db.refresh(note)
-    return note
+    return NoteResponse.model_validate(note)
 
 
-@router.delete("/{note_id}")
+@router.delete("/{note_id}", response_model=MessageResponse, summary="删除笔记")
 async def delete_note(
     note_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
-) -> Any:
-    """删除笔记"""
-    result = await db.execute(
-        select(Note).where(Note.id == note_id, Note.user_id == current_user.id)
-    )
-    note = result.scalar_one_or_none()
-
-    if not note:
-        raise HTTPException(status_code=404, detail="笔记不存在")
-
-    await db.delete(note)
-    await db.commit()
-    return {"success": True}
+    db: DbSession,
+    current_user: CurrentUser,
+) -> MessageResponse:
+    await note_service.delete(db=db, user_id=current_user.id, note_id=note_id)
+    return MessageResponse(message="笔记删除成功")

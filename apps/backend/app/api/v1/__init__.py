@@ -1,5 +1,5 @@
 """
-API V1 路由聚合
+API V1 路由聚合。
 """
 
 from fastapi import APIRouter

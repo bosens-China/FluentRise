@@ -4,13 +4,14 @@
 
 import secrets
 import string
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+from jose import JWTError, jwt  # pyright: ignore[reportMissingModuleSource]
+from passlib.context import CryptContext  # pyright: ignore[reportMissingModuleSource]
 
 from app.core.config import settings
+from app.core.time import utc_now
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ALGORITHM = "HS256"
@@ -22,26 +23,22 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
-    """获取密码哈希。"""
+    """生成密码哈希。"""
     return pwd_context.hash(password)
 
 
 def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
-    """创建 JWT 访问令牌。"""
+    """创建访问令牌。"""
     to_encode = data.copy()
-    expire = datetime.now(UTC) + (
-        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
+    expire = utc_now() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire, "type": "access"})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
 def create_refresh_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
-    """创建 JWT 刷新令牌。"""
+    """创建刷新令牌。"""
     to_encode = data.copy()
-    expire = datetime.now(UTC) + (
-        expires_delta or timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
-    )
+    expire = utc_now() + (expires_delta or timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire, "type": "refresh"})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 
@@ -55,7 +52,7 @@ def decode_token(token: str) -> dict[str, Any] | None:
 
 
 def generate_sms_code(length: int = 6) -> str:
-    """生成随机验证码。"""
+    """生成短信验证码。"""
     return "".join(secrets.choice(string.digits) for _ in range(length))
 
 
@@ -66,5 +63,5 @@ def generate_random_password(length: int = 12) -> str:
 
 
 def generate_token_id(bytes_length: int = 16) -> str:
-    """生成刷新令牌的唯一标识。"""
+    """生成刷新令牌唯一标识。"""
     return secrets.token_hex(bytes_length)

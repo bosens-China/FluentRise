@@ -8,9 +8,3 @@ export type { XPDisplayProps } from './XPDisplay';
 
 export { LevelBadge } from './LevelBadge';
 export type { LevelBadgeProps } from './LevelBadge';
-
-export { AchievementBadge } from './AchievementBadge';
-export type { AchievementType, AchievementBadgeProps } from './AchievementBadge';
-
-export { ProgressRing, DailyGoalRing } from './ProgressRing';
-export type { ProgressRingProps, DailyGoalRingProps } from './ProgressRing';

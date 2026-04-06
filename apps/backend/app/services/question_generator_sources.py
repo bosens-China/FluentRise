@@ -4,22 +4,24 @@
 
 from __future__ import annotations
 
-from datetime import date
 from typing import Any
 
-from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.article import Article
-from app.models.mistake_book import MistakeBookEntry
-from app.models.vocabulary import Vocabulary
+from app.core.time import app_today
+from app.repositories.article_repository import (
+    get_user_article_by_publish_date,
+    list_recent_user_articles,
+)
+from app.repositories.mistake_book_repository import list_recent_unmastered_mistakes
+from app.repositories.vocabulary_repository import list_user_vocabulary_entries
 from app.services.question_generator_models import WORD_PATTERN
 
 
 class QuestionMaterialCollector:
     """负责收集单词、例句和默写句子素材。"""
 
-    TARGET_COUNT = 50
+    TARGET_COUNT = 15
 
     def __init__(self, db: AsyncSession, user_id: int):
         self.db = db
@@ -47,14 +49,7 @@ class QuestionMaterialCollector:
         return words
 
     async def collect_sentences(self) -> list[dict[str, str]]:
-        result = await self.db.execute(
-            select(Article)
-            .where(Article.user_id == self.user_id)
-            .order_by(desc(Article.publish_date))
-            .limit(20)
-        )
-        articles = result.scalars().all()
-
+        articles = await list_recent_user_articles(self.db, user_id=self.user_id, limit=20)
         sentences: list[dict[str, str]] = []
         for article in articles:
             for item in article.content or []:
@@ -83,15 +78,12 @@ class QuestionMaterialCollector:
         return list(dedup.values())
 
     async def _get_mistake_words(self) -> list[dict[str, Any]]:
-        result = await self.db.execute(
-            select(MistakeBookEntry)
-            .where(MistakeBookEntry.user_id == self.user_id)
-            .where(MistakeBookEntry.item_type.in_(["word", "exercise"]))
-            .where(MistakeBookEntry.is_mastered.is_(False))
-            .order_by(desc(MistakeBookEntry.last_seen_at), desc(MistakeBookEntry.mistake_count))
-            .limit(24)
+        entries = await list_recent_unmastered_mistakes(
+            self.db,
+            user_id=self.user_id,
+            item_types=["word", "exercise"],
+            limit=24,
         )
-        entries = result.scalars().all()
 
         words: list[dict[str, Any]] = []
         for entry in entries:
@@ -110,15 +102,12 @@ class QuestionMaterialCollector:
         return words
 
     async def _get_mistake_sentences(self) -> list[dict[str, str]]:
-        result = await self.db.execute(
-            select(MistakeBookEntry)
-            .where(MistakeBookEntry.user_id == self.user_id)
-            .where(MistakeBookEntry.item_type.in_(["sentence", "exercise"]))
-            .where(MistakeBookEntry.is_mastered.is_(False))
-            .order_by(desc(MistakeBookEntry.last_seen_at), desc(MistakeBookEntry.mistake_count))
-            .limit(12)
+        entries = await list_recent_unmastered_mistakes(
+            self.db,
+            user_id=self.user_id,
+            item_types=["sentence", "exercise"],
+            limit=12,
         )
-        entries = result.scalars().all()
 
         items: list[dict[str, str]] = []
         for entry in entries:
@@ -133,13 +122,12 @@ class QuestionMaterialCollector:
         return items
 
     async def _get_today_article_words(self) -> list[dict[str, Any]]:
-        today = date.today()
-        result = await self.db.execute(
-            select(Article)
-            .where(Article.user_id == self.user_id)
-            .where(Article.publish_date == today)
+        today = app_today()
+        article = await get_user_article_by_publish_date(
+            self.db,
+            user_id=self.user_id,
+            publish_date=today,
         )
-        article = result.scalar_one_or_none()
         if article is None or not article.vocabulary:
             return []
 
@@ -155,14 +143,11 @@ class QuestionMaterialCollector:
         ]
 
     async def _get_vocabulary_words(self, *, exclude: set[str], limit: int) -> list[dict[str, Any]]:
-        result = await self.db.execute(
-            select(Vocabulary)
-            .where(Vocabulary.user_id == self.user_id)
-            .order_by(desc(Vocabulary.created_at))
-            .limit(limit * 2)
+        vocabularies = await list_user_vocabulary_entries(
+            self.db,
+            user_id=self.user_id,
+            limit=limit * 2,
         )
-        vocabularies = result.scalars().all()
-
         words: list[dict[str, Any]] = []
         for vocabulary in vocabularies:
             normalized = vocabulary.word.lower()
@@ -188,15 +173,7 @@ class QuestionMaterialCollector:
         exclude: set[str],
         limit: int,
     ) -> list[dict[str, Any]]:
-        result = await self.db.execute(
-            select(Article)
-            .where(Article.user_id == self.user_id)
-            .where(Article.vocabulary.is_not(None))
-            .order_by(desc(Article.publish_date))
-            .limit(12)
-        )
-        articles = result.scalars().all()
-
+        articles = await list_recent_user_articles(self.db, user_id=self.user_id, limit=12)
         words: list[dict[str, Any]] = []
         for article in articles:
             for vocab in article.vocabulary or []:

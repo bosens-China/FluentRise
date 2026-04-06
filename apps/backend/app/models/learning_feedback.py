@@ -1,6 +1,8 @@
 """
-学习反馈模型
+学习反馈模型。
 """
+
+from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -18,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class LearningFeedback(Base):
-    """用户学习反馈"""
+    """用户学习反馈。"""
 
     __tablename__ = "learning_feedbacks"
 
@@ -28,38 +30,34 @@ class LearningFeedback(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-        comment="用户ID",
+        comment="用户 ID",
     )
     article_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("articles.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-        comment="关联文章ID",
+        comment="文章 ID",
     )
     practice_session_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("practice_sessions.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-        comment="关联练习会话ID",
+        comment="训练会话 ID",
     )
     module: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
-        comment="反馈模块: lesson/playground/review",
+        comment="反馈模块",
     )
     feedback_type: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
-        comment="反馈类型: too_easy/too_hard/just_right/repetitive/goal_mismatch/other",
+        comment="反馈类型",
     )
-    comment: Mapped[str | None] = mapped_column(Text, nullable=True, comment="用户补充说明")
-    payload: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON,
-        nullable=True,
-        comment="附加上下文",
-    )
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True, comment="补充说明")
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, comment="附加信息")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

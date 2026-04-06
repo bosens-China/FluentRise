@@ -7,13 +7,10 @@ from __future__ import annotations
 import random
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
-from app.db.database import get_db
-from app.schemas.user import UserInfo
+from app.api.deps import CurrentUser, DbSession
 from app.services.encouragement_service import EncouragementResult, encouragement_service
 from app.services.study_log_service import study_log_service
 
@@ -33,14 +30,29 @@ class EncouragementRequest(BaseModel):
 
 
 ENCOURAGING_QUOTES = [
-    {"en": "A little progress each day adds up to big results.", "zh": "每天进步一点点，慢慢就会变成很大的成果。"},
+    {
+        "en": "A little progress each day adds up to big results.",
+        "zh": "每天进步一点点，慢慢就会变成很大的成果。",
+    },
     {"en": "You are doing better than you think.", "zh": "你比自己想象中做得更好。"},
     {"en": "Small steps still move you forward.", "zh": "哪怕步子小，也是在向前走。"},
-    {"en": "Learning grows quietly, then suddenly feels natural.", "zh": "学习常常是悄悄积累，然后忽然变得顺手。"},
-    {"en": "Your effort today is building tomorrow's confidence.", "zh": "你今天的努力，正在变成明天的底气。"},
-    {"en": "Consistency makes hard things feel easy later.", "zh": "稳定坚持，会让原本困难的事慢慢变轻松。"},
+    {
+        "en": "Learning grows quietly, then suddenly feels natural.",
+        "zh": "学习常常是悄悄积累，然后忽然变得顺手。",
+    },
+    {
+        "en": "Your effort today is building tomorrow's confidence.",
+        "zh": "你今天的努力，正在变成明天的底气。",
+    },
+    {
+        "en": "Consistency makes hard things feel easy later.",
+        "zh": "稳定坚持，会让原本困难的事慢慢变轻松。",
+    },
     {"en": "You are closer than yesterday.", "zh": "你已经比昨天更近一步了。"},
-    {"en": "Keep your own pace. It still counts.", "zh": "按自己的节奏来也很好，这样的前进同样算数。"},
+    {
+        "en": "Keep your own pace. It still counts.",
+        "zh": "按自己的节奏来也很好，这样的前进同样算数。",
+    },
 ]
 
 
@@ -54,8 +66,8 @@ async def get_quotes(count: int = 5) -> list[Quote]:
 @router.post("/encouragement", response_model=EncouragementResult, summary="生成鼓励文案")
 async def generate_encouragement(
     request: EncouragementRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
+    db: DbSession,
+    current_user: CurrentUser,
 ) -> Any:
     """生成中英文鼓励文案。"""
     streak_days = request.streak_days

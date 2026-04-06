@@ -24,7 +24,9 @@
     /* paths */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "zustand": ["node_modules/zustand/index.d.ts"],
+      "zustand/*": ["node_modules/zustand/*"]
     }
   },
   "include": ["src"]

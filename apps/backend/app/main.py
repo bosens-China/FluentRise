@@ -1,5 +1,5 @@
 """
-FluentRise 后端主应用入口。
+FluentRise 后端应用入口。
 """
 
 from __future__ import annotations
@@ -7,18 +7,20 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1 import api_router
 from app.core.config import settings
+from app.core.exceptions import AppError
 from app.core.rate_limit import init_rate_limiters
-from app.db.database import close_db_connection, init_db
+from app.db.database import check_db_connection, close_db_connection
 from app.db.redis import close_redis, get_redis, init_redis
 
 
 class ConsoleStyle:
-    """控制台颜色样式。"""
+    """控制台日志颜色。"""
 
     reset = "\033[0m"
     bold = "\033[1m"
@@ -38,17 +40,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     应用生命周期管理。
 
-    启动时初始化 Redis、限流器和数据库，关闭时回收资源。
+    启动时初始化 Redis、限流器和数据库连接；关闭时释放资源。
     """
+    del app
+
     console_banner("[START]", "正在初始化应用...", ConsoleStyle.cyan)
+
     await init_redis()
-    console_banner("[REDIS]", "Redis 已连接", ConsoleStyle.magenta)
+    console_banner("[REDIS]", "Redis 连接成功", ConsoleStyle.magenta)
 
     await init_rate_limiters(await get_redis())
     console_banner("[LIMIT]", "限流器初始化完成", ConsoleStyle.yellow)
 
-    await init_db()
-    console_banner("[DB]", "数据库初始化完成", ConsoleStyle.magenta)
+    await check_db_connection()
+    console_banner("[DB]", "数据库连接检查完成", ConsoleStyle.magenta)
+
     console_banner("[OK]", f"{settings.APP_NAME} 启动成功", ConsoleStyle.green)
     console_banner("[DOCS]", "API 文档: http://localhost:8000/docs", ConsoleStyle.cyan)
 
@@ -79,9 +85,15 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(AppError)
+async def handle_app_error(_request: Request, exc: AppError) -> JSONResponse:
+    """统一处理业务异常，避免 service 层依赖 FastAPI 的 HTTPException。"""
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
 @app.get("/", tags=["健康检查"])
 async def root() -> dict[str, str]:
-    """根路由健康检查。"""
+    """根路径健康检查。"""
     return {
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,

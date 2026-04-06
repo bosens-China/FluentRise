@@ -1,1 +1,1 @@
-# FluentRise 后端应用
+"""FluentRise 后端应用。"""

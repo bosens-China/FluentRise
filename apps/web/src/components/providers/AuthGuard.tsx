@@ -1,15 +1,12 @@
 /**
- * AuthGuard - 统一的路由认证守卫
- * 
- * 替代每个路由重复写 beforeLoad 检查
- * 用法：在需要认证的布局组件中包裹
+ * 统一的路由认证守卫。
  */
 
 import { Navigate, useLocation } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
-import { isAuthenticated } from '@/utils/request';
-import { getCachedUserInfo } from '@/api/user';
+import { useEffect } from 'react';
+
 import { LoadingScreen } from '@/components/ui/LoadingScreen';
+import { syncAuthSession, useIsAuthenticated, useUser } from '@/stores/userStore';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -17,53 +14,35 @@ interface AuthGuardProps {
   requireAssessment?: boolean;
 }
 
-export function AuthGuard({ 
-  children, 
+export function AuthGuard({
+  children,
   fallback,
-  requireAssessment = false 
+  requireAssessment = false,
 }: AuthGuardProps) {
   const location = useLocation();
-  const [isChecking, setIsChecking] = useState(true);
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [hasAssessment, setHasAssessment] = useState(true);
+  const isAuthed = useIsAuthenticated();
+  const user = useUser();
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const authed = isAuthenticated();
-      setIsAuthed(authed);
-      
-      if (authed && requireAssessment) {
-        const user = getCachedUserInfo();
-        setHasAssessment(user?.has_completed_assessment ?? false);
-      }
-      
-      setIsChecking(false);
-    };
-    
-    checkAuth();
-  }, [requireAssessment]);
+    syncAuthSession();
+  }, []);
 
-  if (isChecking) {
+  if (isAuthed === undefined) {
     return fallback ? <>{fallback}</> : <LoadingScreen />;
   }
 
   if (!isAuthed) {
     return (
-      <Navigate 
-        to="/login" 
+      <Navigate
+        to="/login"
         search={{ redirect: location.pathname + location.search }}
-        replace 
+        replace
       />
     );
   }
 
-  if (requireAssessment && !hasAssessment) {
-    return (
-      <Navigate 
-        to="/" 
-        replace 
-      />
-    );
+  if (requireAssessment && user && !user.has_completed_assessment) {
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;

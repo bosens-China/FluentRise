@@ -247,7 +247,7 @@ function ReviewPage() {
                   {item.is_completed ? '已完成' : '进行中'}
                 </Badge>
                 <span className="text-sm text-[var(--text-tertiary)]">
-                  {formatDate(item.publish_date)}
+                  {formatDate(item.publish_date || item.created_at)}
                 </span>
               </div>
 

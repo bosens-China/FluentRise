@@ -1,26 +1,26 @@
 /**
- * 认证相关的自定义 Hooks
+ * 认证相关自定义 Hooks。
  */
+
 import { useNavigate } from '@tanstack/react-router';
-import { useRequest, useSetState } from 'ahooks';
-import { message } from '@/lib/toast';
+import { useRequest } from 'ahooks';
 import { useEffect, useCallback } from 'react';
 
 import { sendSmsCode, loginByPhone, logout, type UserInfo } from '@/api/auth';
 import { getCurrentUser, getCachedUserInfo } from '@/api/user';
+import { clearTokens, isAuthenticated, setTokens } from '@/lib/auth-storage';
+import { message } from '@/lib/toast';
 import {
-  clearTokens,
-  isAuthenticated,
-  setStoredUserInfo,
-} from '@/lib/auth-storage';
-
-interface AuthState {
-  user: UserInfo | null;
-  isLoading: boolean;
-}
+  clearAuthSession,
+  setAuthSession,
+  syncAuthSession,
+  useAuthLoading,
+  useUser,
+  useUserStore,
+} from '@/stores/userStore';
 
 /**
- * 使用发送验证码
+ * 发送验证码。
  */
 export function useSendSmsCode() {
   const { run, loading } = useRequest(sendSmsCode, {
@@ -40,20 +40,18 @@ export function useSendSmsCode() {
 }
 
 /**
- * 使用手机号登录
+ * 手机号登录。
  */
 export function useLoginByPhone() {
   const navigate = useNavigate();
-  const [state, setState] = useSetState<AuthState>({
-    user: null,
-    isLoading: false,
-  });
+  const user = useUser();
 
   const { run, loading } = useRequest(loginByPhone, {
     manual: true,
     onSuccess: (data) => {
-      setState({ user: data.user });
-      message.success('登录成功！');
+      setTokens(data.tokens.access_token, data.tokens.refresh_token);
+      setAuthSession(data.user);
+      message.success('登录成功');
       navigate({ to: '/' });
     },
     onError: (error: Error) => {
@@ -64,12 +62,12 @@ export function useLoginByPhone() {
   return {
     login: run,
     loading,
-    user: state.user,
+    user,
   };
 }
 
 /**
- * 使用退出登录
+ * 退出登录。
  */
 export function useLogout() {
   const navigate = useNavigate();
@@ -77,12 +75,14 @@ export function useLogout() {
   const { run, loading } = useRequest(logout, {
     manual: true,
     onSuccess: () => {
+      clearTokens();
+      clearAuthSession();
       message.success('已退出登录');
       navigate({ to: '/login' });
     },
     onError: () => {
-      // 即使请求失败也清除本地状态
       clearTokens();
+      clearAuthSession();
       navigate({ to: '/login' });
     },
   });
@@ -94,51 +94,56 @@ export function useLogout() {
 }
 
 /**
- * 使用当前用户信息
+ * 当前用户信息。
  */
 export function useCurrentUser() {
-  const [state, setState] = useSetState<AuthState>({
-    user: null,
-    isLoading: true,
-  });
+  const user = useUser();
+  const isLoading = useAuthLoading();
+  const setLoading = useUserStore(
+    (state: ReturnType<typeof useUserStore.getState>) => state.setLoading,
+  );
 
   const { run } = useRequest(getCurrentUser, {
     manual: true,
-    onSuccess: (data) => {
-      setState({ user: data, isLoading: false });
-      setStoredUserInfo(data);
+    onSuccess: (data: UserInfo) => {
+      setAuthSession(data);
     },
     onError: () => {
-      // 使用缓存数据
       const cached = getCachedUserInfo();
-      setState({ user: cached, isLoading: false });
+      if (cached) {
+        setAuthSession(cached);
+        return;
+      }
+
+      clearTokens();
+      clearAuthSession();
+    },
+    onFinally: () => {
+      setLoading(false);
     },
   });
 
   useEffect(() => {
-    // 先使用缓存数据
-    const cached = getCachedUserInfo();
-    if (cached) {
-      setState({ user: cached, isLoading: false });
+    syncAuthSession();
+
+    if (!isAuthenticated()) {
+      setLoading(false);
+      return;
     }
 
-    // 如果已登录，获取最新数据
-    if (isAuthenticated()) {
-      run();
-    } else {
-      setState({ isLoading: false });
-    }
-  }, [run, setState]);
+    setLoading(true);
+    void run();
+  }, [run, setLoading]);
 
   return {
-    user: state.user,
-    isLoading: state.isLoading,
+    user,
+    isLoading,
     refresh: run,
   };
 }
 
 /**
- * 使用认证状态检查
+ * 认证状态检查。
  */
 export function useAuthCheck() {
   const navigate = useNavigate();

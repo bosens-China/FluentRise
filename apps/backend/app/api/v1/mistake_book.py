@@ -7,13 +7,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
-from app.db.database import get_db
-from app.schemas.user import UserInfo
+from app.api.deps import CurrentUser, DbSession
 from app.services.mistake_service import mistake_service
 
 router = APIRouter(prefix="/mistakes", tags=["错题本"])
@@ -45,8 +42,8 @@ class MistakeBookResponse(BaseModel):
 
 @router.get("", response_model=MistakeBookResponse, summary="获取错题本")
 async def get_mistake_book(
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
+    db: DbSession,
+    current_user: CurrentUser,
 ) -> Any:
     """返回当前用户的错题本条目。"""
     entries = await mistake_service.list_entries(db, current_user.id)

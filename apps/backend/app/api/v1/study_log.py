@@ -2,13 +2,10 @@
 学习打卡记录 API
 """
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Query
 
-from app.api.deps import get_current_user
-from app.db.database import get_db
+from app.api.deps import CurrentUser, DbSession
 from app.schemas.study_log import StudyLogMonthResponse, StudyLogStreakResponse
-from app.schemas.user import UserInfo
 from app.services.study_log_service import study_log_service
 
 router = APIRouter(prefix="/study-logs", tags=["学习打卡"])
@@ -16,8 +13,8 @@ router = APIRouter(prefix="/study-logs", tags=["学习打卡"])
 
 @router.post("/check-in", summary="今日打卡")
 async def check_in(
-    current_user: UserInfo = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ) -> dict:
     """
     执行今日打卡
@@ -30,8 +27,8 @@ async def check_in(
 
 @router.get("/streak", response_model=StudyLogStreakResponse, summary="获取连胜天数")
 async def get_streak(
-    current_user: UserInfo = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ) -> StudyLogStreakResponse:
     """
     获取当前用户的连续打卡天数以及今日是否已打卡
@@ -41,10 +38,10 @@ async def get_streak(
 
 @router.get("/month", response_model=StudyLogMonthResponse, summary="获取月度打卡记录")
 async def get_month_logs(
+    current_user: CurrentUser,
+    db: DbSession,
     year: int = Query(..., description="年份，如 2024"),
     month: int = Query(..., description="月份，1-12"),
-    current_user: UserInfo = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ) -> StudyLogMonthResponse:
     """
     获取指定月份的所有打卡日期

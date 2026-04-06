@@ -7,7 +7,6 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from langchain_core.messages import AIMessageChunk
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.core.config import settings
@@ -35,10 +34,11 @@ class AIChatService:
             [
                 (
                     "system",
-                    "你是中文用户的英语学习助手。默认使用中文回答，必要时给出简短自然的英文示例。"
-                    "如果是 lesson 模式，必须围绕课文场景、新词和核心句型来回答，不要发散。"
-                    "如果是 general 模式，可以解释表达、翻译句子、纠正语法，但保持简洁、友好、易懂。"
-                    "优先短段落输出，让前端可以稳定流式展示。",
+                    "你是专注、专业的英语学习助教。请用简洁的中文回答，必要时提供英语示例。\n"
+                    "【严格的边界限制】：你只能解答与“英语学习”、“当前课文内容”、“当课单词或语法”相关的问题。\n"
+                    "如果用户询问与英语学习或当前课文无关的任何问题（例如：写代码、聊天气、问菜谱、问新闻等），"
+                    "你必须委婉地拒绝，并主动将话题拉回英语学习或当前课文上。\n"
+                    "优先使用短段落输出，避免长篇大论。",
                 ),
                 (
                     "user",
@@ -47,7 +47,7 @@ class AIChatService:
                     "学习目标: {goal_text}\n"
                     "课文上下文: {article_context}\n"
                     "用户消息: {message}\n"
-                    "请给出一段简洁、有帮助、适合当前水平的回复。",
+                    "请根据上述要求，给出专注、简洁的回复。",
                 ),
             ]
         ).partial(
@@ -60,10 +60,7 @@ class AIChatService:
 
     @staticmethod
     def _extract_chunk_text(chunk: object) -> str:
-        if isinstance(chunk, AIMessageChunk):
-            content = chunk.content
-        else:
-            content = getattr(chunk, "content", "")
+        content: Any = getattr(chunk, "content", "")
 
         if isinstance(content, str):
             return content
@@ -106,8 +103,8 @@ class AIChatService:
         try:
             chain = prompt | self.llm
             response = await chain.ainvoke({})
-            content = getattr(response, "content", "")
-            if isinstance(content, str) and content.strip():
+            content = self._extract_chunk_text(response)
+            if content.strip():
                 return content.strip()
         except Exception:
             pass

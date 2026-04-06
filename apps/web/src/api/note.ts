@@ -99,6 +99,6 @@ export async function updateNote(id: number, data: UpdateNoteRequest): Promise<N
  * @param id - 笔记 ID
  * @returns 删除结果
  */
-export async function deleteNote(id: number): Promise<{ success: boolean }> {
+export async function deleteNote(id: number): Promise<{ message: string }> {
   return request.delete(`/notes/${id}`);
 }

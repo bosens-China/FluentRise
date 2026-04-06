@@ -1,5 +1,5 @@
 """
-复习计划模型
+复习计划模型。
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.time import app_today
 from app.db.database import Base
 
 if TYPE_CHECKING:
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class ReviewStage(IntEnum):
-    """复习阶段：1、2、3、6、7、15、30 天。"""
+    """复习阶段。"""
 
     STAGE_1 = 1
     STAGE_2 = 2
@@ -28,17 +29,18 @@ class ReviewStage(IntEnum):
     STAGE_5 = 5
     STAGE_6 = 6
     STAGE_7 = 7
-    COMPLETED = 8
+    STAGE_8 = 8
+    STAGE_9 = 9
+    COMPLETED = 10
 
 
-REVIEW_INTERVALS = [1, 2, 3, 6, 7, 15, 30]
+REVIEW_INTERVALS = [1, 2, 3, 5, 7, 14, 30, 60, 90]
 
 
 def get_next_review_date(initial_completed_at: datetime, stage: int) -> datetime:
-    """根据阶段返回下次复习时间。"""
-    if stage > 7:
-        return datetime(2099, 12, 31)
-
+    """根据阶段计算下次复习时间。"""
+    if stage >= ReviewStage.COMPLETED:
+        return initial_completed_at + timedelta(days=365 * 100)
     return initial_completed_at + timedelta(days=REVIEW_INTERVALS[stage - 1])
 
 
@@ -71,7 +73,7 @@ class ReviewSchedule(Base):
     initial_completed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        comment="首次完成学习时间",
+        comment="首次完成时间",
     )
     last_reviewed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
@@ -81,7 +83,7 @@ class ReviewSchedule(Base):
     self_assessment: Mapped[str | None] = mapped_column(
         String(20),
         nullable=True,
-        comment="复习后的主观评估",
+        comment="复习自评",
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -99,16 +101,15 @@ class ReviewSchedule(Base):
     )
 
     def get_stage_label(self) -> str:
-        if self.current_stage >= 8:
+        """返回阶段文案。"""
+        if self.current_stage >= ReviewStage.COMPLETED:
             return "已完成"
-        return f"第 {self.current_stage}/7 轮"
+        return f"第 {self.current_stage}/9 轮"
 
     def get_days_until_next(self) -> int:
-        from datetime import date
-
-        today = date.today()
-        next_date = self.next_review_date.date() if self.next_review_date else today
-        return (next_date - today).days
+        """返回距离下次复习的天数。"""
+        next_date = self.next_review_date.date() if self.next_review_date else app_today()
+        return (next_date - app_today()).days
 
     def __repr__(self) -> str:
         return f"<ReviewSchedule(id={self.id}, stage={self.current_stage}, next={self.next_review_date})>"
@@ -128,7 +129,7 @@ class ReviewLog(Base):
         comment="复习计划 ID",
     )
     stage: Mapped[int] = mapped_column(Integer, nullable=False, comment="复习轮次")
-    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="复习用时")
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="复习耗时")
     is_quick_mode: Mapped[bool] = mapped_column(default=False, comment="是否快速复习")
     preview_assessment: Mapped[str | None] = mapped_column(
         String(20),

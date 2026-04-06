@@ -4,6 +4,12 @@ export interface AIChatRequest {
   mode: 'lesson' | 'general';
   message: string;
   article_id?: number;
+  history?: AIChatHistoryItem[];
+}
+
+export interface AIChatHistoryItem {
+  role: 'user' | 'assistant';
+  content: string;
 }
 
 export interface AIChatResponse {

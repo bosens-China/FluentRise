@@ -107,13 +107,13 @@ export async function submitReview(
 }
 
 export function getStageLabel(stage: number): string {
-  if (stage >= 8) return '已完成';
-  return `第 ${stage}/7 轮`;
+  if (stage >= 10) return '已完成';
+  return `第 ${stage}/9 轮`;
 }
 
 export function getStageInterval(stage: number): string {
-  const intervals = [1, 2, 3, 6, 7, 15, 30];
-  if (stage < 1 || stage > 7) return '';
+  const intervals = [1, 2, 3, 5, 7, 14, 30, 60, 90];
+  if (stage < 1 || stage > 9) return '';
   return `${intervals[stage - 1]}天后`;
 }
 
@@ -125,6 +125,6 @@ export function formatReviewDueText(daysUntilNext: number): string {
 
 export function getReviewProgress(currentStage: number | null): number {
   if (!currentStage || currentStage < 1) return 0;
-  if (currentStage >= 8) return 100;
-  return Math.round(((currentStage - 1) / 7) * 100);
+  if (currentStage >= 10) return 100;
+  return Math.round(((currentStage - 1) / 9) * 100);
 }

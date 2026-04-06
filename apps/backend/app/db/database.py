@@ -1,15 +1,23 @@
 """
-数据库连接和会话管理
+数据库连接与会话管理。
 """
 
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import MetaData, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
-# 创建异步引擎
+NAMING_CONVENTION = {
+    "ix": "ix_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
@@ -17,7 +25,6 @@ engine = create_async_engine(
     pool_pre_ping=True,
 )
 
-# 异步会话工厂
 AsyncSessionLocal = async_sessionmaker(
     engine,
     class_=AsyncSession,
@@ -27,13 +34,14 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
-# 声明性基类（SQLAlchemy 2.0 风格）
 class Base(DeclarativeBase):
-    """ORM 基类"""
+    """ORM 基类。"""
+
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """获取数据库会话（依赖注入用）"""
+    """获取数据库会话。"""
     async with AsyncSessionLocal() as session:
         try:
             yield session
@@ -41,26 +49,12 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def init_db() -> None:
-    """初始化数据库（创建表）"""
-    # 确保所有模型在 create_all 之前被导入
-    # 这样 SQLAlchemy 才能识别到它们
-    # 这些导入是为了注册模型到 SQLAlchemy 元数据，确保 create_all 能创建表
-    from app.models.article import Article  # noqa: F401 # type: ignore
-    from app.models.learning_feedback import LearningFeedback  # noqa: F401 # type: ignore
-    from app.models.membership import Membership  # noqa: F401 # type: ignore
-    from app.models.mistake_book import MistakeBookEntry  # noqa: F401 # type: ignore
-    from app.models.note import Note  # noqa: F401 # type: ignore
-    from app.models.practice_session import PracticeSession  # noqa: F401 # type: ignore
-    from app.models.review_schedule import ReviewLog, ReviewSchedule  # noqa: F401 # type: ignore
-    from app.models.study_log import StudyLog  # noqa: F401 # type: ignore
-    from app.models.user import User  # noqa: F401 # type: ignore
-    from app.models.vocabulary import Vocabulary  # noqa: F401 # type: ignore
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+async def check_db_connection() -> None:
+    """检查数据库连通性。"""
+    async with engine.connect() as connection:
+        await connection.execute(text("SELECT 1"))
 
 
 async def close_db_connection() -> None:
-    """关闭数据库连接池"""
+    """关闭数据库连接池。"""
     await engine.dispose()

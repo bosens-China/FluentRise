@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "apps:lines": "python -X utf8 scripts/scan_apps_lines.py",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

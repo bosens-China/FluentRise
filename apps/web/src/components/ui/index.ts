@@ -26,7 +26,7 @@ export type { EmptyProps } from './Empty';
 
 export { LoadingScreen, LoadingSpinner } from './LoadingScreen';
 
-export { Skeleton, CardSkeleton, ArticleCardSkeleton, StatsCardSkeleton, ListSkeleton } from './Skeleton';
+export { Skeleton } from './Skeleton';
 
 export { MobileNav } from './MobileNav';
 

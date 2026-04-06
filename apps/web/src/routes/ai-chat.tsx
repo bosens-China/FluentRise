@@ -11,13 +11,13 @@ import {
   Typography,
 } from 'antd';
 
-import { streamAIChatMessage } from '@/api/aiChat';
-import { getArticleDetail, getTodayArticle } from '@/api/article';
+import { streamAIChatMessage, type AIChatHistoryItem } from '@/api/aiChat';
+import { getArticleDetail, getLearningPath } from '@/api/article';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useQuery } from '@/hooks/useData';
 import { isAuthenticated } from '@/utils/request';
 
-const { Paragraph, Text, Title } = Typography;
+const { Paragraph, Title } = Typography;
 
 type ChatMode = 'lesson' | 'general';
 
@@ -55,14 +55,16 @@ function AIChatPage() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const todayArticleRequest = useQuery(getTodayArticle);
+  const pathRequest = useQuery(getLearningPath);
 
   const lessonArticleId = useMemo(() => {
     if (typeof search.articleId === 'number') {
       return search.articleId;
     }
-    return todayArticleRequest.data?.article?.id;
-  }, [search.articleId, todayArticleRequest.data?.article?.id]);
+    // 从学习路径中找第一个已生成的文章
+    const firstRealized = pathRequest.data?.proposals.find((p) => p.status === 'realized' && p.article_id);
+    return firstRealized?.article_id || pathRequest.data?.completed_articles[0]?.id;
+  }, [search.articleId, pathRequest.data]);
 
   const articleDetailRequest = useQuery(
     async () => {
@@ -98,173 +100,167 @@ function AIChatPage() {
       return;
     }
     if (mode === 'lesson' && !lessonArticleId) {
-      message.warning('当前还没有可用的课文上下文');
+      message.warning('请先选择或完成一篇课文');
       return;
     }
 
-    const userMessageId = `user-${Date.now()}`;
-    const assistantMessageId = `assistant-${Date.now()}`;
+    const userMsg: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: trimmed,
+    };
 
-    setMessages((previous) => [
-      ...previous,
-      { id: userMessageId, role: 'user', content: trimmed },
-      { id: assistantMessageId, role: 'assistant', content: '' },
-    ]);
+    setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setIsStreaming(true);
 
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    const assistantMsgId = (Date.now() + 1).toString();
+    setMessages((prev) => [
+      ...prev,
+      { id: assistantMsgId, role: 'assistant', content: '' },
+    ]);
+
+    abortControllerRef.current = new AbortController();
 
     try {
       await streamAIChatMessage(
         {
-          mode,
           message: trimmed,
+          mode: mode,
           article_id: mode === 'lesson' ? lessonArticleId : undefined,
+          history: messages
+            .filter((m) => m.id !== 'welcome')
+            .map<AIChatHistoryItem>((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
         },
         {
-          signal: controller.signal,
-          onChunk: (_chunk, accumulated) => {
-            setMessages((previous) =>
-              previous.map((item) =>
-                item.id === assistantMessageId
-                  ? { ...item, content: accumulated }
-                  : item,
+          onChunk: (chunk: string) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId ? { ...m, content: m.content + chunk } : m,
               ),
             );
           },
+          signal: abortControllerRef.current.signal,
         },
       );
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') {
-        return;
-      }
-      setMessages((previous) =>
-        previous.filter((item) => item.id !== assistantMessageId),
-      );
-      message.error(
-        (error as Error).message ||
-          (mode === 'lesson' ? '课文对话发送失败' : 'AI 求助发送失败'),
-      );
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      message.error('发送失败，请重试');
     } finally {
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null;
-      }
       setIsStreaming(false);
     }
   };
 
   return (
     <DashboardLayout>
-      <div className="mb-8">
-        <Title level={2} className="!mb-2 !font-black !text-gray-800">
-          AI 对话
-        </Title>
-        <Text className="text-base text-gray-500">
-          一个入口专门围绕课文练习，另一个入口处理更通用的表达求助。
-        </Text>
-      </div>
-
-      <Card className="mb-6 rounded-[32px] border-0 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
-        <Segmented<ChatMode>
-          block
-          value={mode}
-          onChange={(nextValue) => setMode(nextValue)}
-          options={[
-            { label: '课文对话', value: 'lesson' },
-            { label: '通用求助', value: 'general' },
-          ]}
-        />
-
-        {mode === 'lesson' ? (
-          <div className="mt-5 rounded-3xl bg-amber-50 p-5">
-            {articleDetailRequest.data ? (
-              <>
-                <div className="mb-2 text-sm font-bold uppercase tracking-[0.16em] text-amber-500">
-                  当前课文
-                </div>
-                <Title level={4} className="!mb-2 !text-gray-800">
-                  {articleDetailRequest.data.title}
-                </Title>
-                <Paragraph className="!mb-0 text-gray-600">
-                  这个模式下，AI 会尽量围绕当前课文的场景、新词和句型来帮助你。
-                </Paragraph>
-              </>
-            ) : (
-              <Empty
-                description="还没有可用的课文上下文"
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              />
-            )}
+      <div className="flex h-[calc(100vh-160px)] flex-col gap-6 lg:flex-row">
+        <div className="flex flex-1 flex-col overflow-hidden rounded-[32px] bg-white shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between border-b border-slate-50 px-6 py-4">
+            <Title level={4} className="!mb-0">AI 助教</Title>
+            <Segmented
+              value={mode}
+              onChange={(v) => setMode(v as ChatMode)}
+              options={[
+                { label: '课文答疑', value: 'lesson' },
+                { label: '自由聊', value: 'general' },
+              ]}
+            />
           </div>
-        ) : null}
-      </Card>
 
-      <Card className="rounded-[32px] border-0 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
-        <div
-          ref={scrollContainerRef}
-          className="mb-6 max-h-[520px] space-y-4 overflow-y-auto pr-2"
-        >
-          {messages.map((item) => (
-            <div
-              key={item.id}
-              className={`rounded-3xl px-5 py-4 ${
-                item.role === 'assistant'
-                  ? 'mr-12 bg-slate-50 text-gray-700'
-                  : 'ml-12 bg-gradient-to-r from-amber-500 to-orange-500 text-white'
-              }`}
-            >
-              <div className="mb-1 text-xs font-bold uppercase tracking-[0.16em] opacity-70">
-                {item.role === 'assistant' ? 'AI' : '我'}
-              </div>
-              <Paragraph
-                className={`!mb-0 whitespace-pre-wrap ${
-                  item.role === 'assistant' ? 'text-gray-700' : 'text-white'
-                }`}
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 overflow-y-auto p-6 space-y-6"
+          >
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                {item.content ||
-                  (isStreaming && item.role === 'assistant'
-                    ? '正在组织答案...'
-                    : '')}
-              </Paragraph>
-            </div>
-          ))}
+                <div
+                  className={`max-w-[80%] rounded-2xl px-4 py-3 text-base leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'bg-[var(--primary)] text-white shadow-md rounded-tr-none'
+                      : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-none'
+                  }`}
+                >
+                  {msg.content || (isStreaming && msg.role === 'assistant' ? '...' : '')}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="border-t border-slate-50 p-4">
+            <Space.Compact className="w-full">
+              <Input
+                size="large"
+                placeholder="在此输入你的问题..."
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onPressEnter={handleSend}
+                disabled={isStreaming}
+                className="rounded-l-2xl border-slate-200"
+              />
+              <Button
+                type="primary"
+                size="large"
+                onClick={handleSend}
+                loading={isStreaming}
+                className="rounded-r-2xl px-8 font-bold"
+              >
+                发送
+              </Button>
+            </Space.Compact>
+          </div>
         </div>
 
-        <Space.Compact className="w-full">
-          <Input.TextArea
-            value={input}
-            autoSize={{ minRows: 2, maxRows: 4 }}
-            onChange={(event) => setInput(event.target.value)}
-            onPressEnter={(event) => {
-              if (!event.shiftKey) {
-                event.preventDefault();
-                void handleSend();
-              }
-            }}
-            placeholder={
-              mode === 'lesson'
-                ? '问课文里的句子、单词、表达都可以'
-                : '把你不会表达的中文或英文发给我'
-            }
-          />
-          <Button
-            type="primary"
-            loading={isStreaming}
-            className="h-auto border-0 bg-gradient-to-r from-amber-500 to-orange-500 px-8"
-            onClick={() => void handleSend()}
-          >
-            发送
-          </Button>
-        </Space.Compact>
-
-        {isStreaming ? (
-          <Text className="mt-3 block text-xs text-gray-400">
-            AI 正在流式输出...
-          </Text>
-        ) : null}
-      </Card>
+        {mode === 'lesson' && (
+          <div className="w-full lg:w-80 flex flex-col gap-4">
+            <Card title="当前关联课文" className="rounded-2xl border-slate-100 shadow-sm">
+              {articleDetailRequest.loading ? (
+                <div className="animate-pulse space-y-2">
+                  <div className="h-4 bg-slate-100 rounded w-3/4"></div>
+                  <div className="h-4 bg-slate-100 rounded w-1/2"></div>
+                </div>
+              ) : articleDetailRequest.data ? (
+                <div>
+                  <Title level={5}>{articleDetailRequest.data.title}</Title>
+                  <Paragraph className="text-slate-500 text-sm line-clamp-3">
+                    {articleDetailRequest.data.content[0]?.en}
+                  </Paragraph>
+                  <Button type="link" className="p-0 h-auto">查看正文</Button>
+                </div>
+              ) : (
+                <Empty description="暂未关联课文" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              )}
+            </Card>
+            
+            <Card title="你可以这样问" className="rounded-2xl border-slate-100 shadow-sm bg-amber-50/30">
+              <div className="space-y-2">
+                {[
+                  '这句话怎么翻译？',
+                  '这里用了什么语法？',
+                  '这个单词怎么用？',
+                  '能给我举个例子吗？'
+                ].map(q => (
+                  <Button 
+                    key={q} 
+                    block 
+                    className="text-left h-auto py-2 px-3 border-amber-100 hover:border-amber-300 text-slate-600 bg-white"
+                    onClick={() => setInput(q)}
+                  >
+                    {q}
+                  </Button>
+                ))}
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
     </DashboardLayout>
   );
 }
+
+export default AIChatPage;

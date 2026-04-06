@@ -1,457 +1,197 @@
 """
-文章 API
+文章 API。
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime
-from typing import Any
+from fastapi import APIRouter, Response
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import JSONResponse
-from sqlalchemy import desc, func, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.api.deps import get_current_user
-from app.db.database import get_db
-from app.models.article import Article
-from app.models.learning_feedback import LearningFeedback
-from app.models.vocabulary import Vocabulary
+from app.api.deps import CurrentUser, DbSession, StandardPagination
 from app.schemas.article import (
     ArticleAudioTimelineResponse,
-    ArticleContent,
-    ArticleListItem,
     ArticleListResponse,
     ArticleResponse,
-    BilingualContent,
-    CultureTip,
-    Exercise,
     GenerateArticleRequest,
-    GrammarPoint,
+    MiniStoryEvaluateRequest,
+    MiniStoryEvaluateResponse,
+    MiniStoryResponse,
     TodayArticleResponse,
     UpdateProgressRequest,
-    VocabularyWord,
 )
-from app.schemas.user import UserInfo
-from app.services.article_generator import article_generator
-from app.services.article_service import (
-    apply_generated_article,
-    collect_generation_context,
-    derive_difficulty_bias,
-    normalize_generated_article,
-    reconcile_article_record,
+from app.schemas.article_proposal import LearningPathResponse
+from app.services.article_content_service import (
+    generate_article_audio_bytes,
+    get_article_audio_timeline,
+    get_user_article,
 )
-from app.services.mistake_service import infer_mistake_item_type, mistake_service
-from app.services.review_service import review_service
-from app.services.study_log_service import study_log_service
-from app.services.tts_service import tts_service
+from app.services.article_lifecycle_service import (
+    generate_today_article_for_user,
+    get_article_detail_response,
+    get_article_history_response,
+    get_today_article_response,
+)
+from app.services.article_progress_service import update_article_progress_for_user
+from app.services.article_proposal_service import article_proposal_service
+from app.services.mini_story_service import mini_story_service
 
 router = APIRouter(prefix="/articles", tags=["文章"])
 
 
 @router.get("/today", response_model=TodayArticleResponse)
 async def get_today_article(
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
-) -> Any:
+    db: DbSession,
+    current_user: CurrentUser,
+) -> TodayArticleResponse:
     """获取今天的文章。"""
-    today = date.today()
-    result = await db.execute(
-        select(Article)
-        .where(Article.user_id == current_user.id)
-        .where(Article.publish_date == today)
-    )
-    article = result.scalar_one_or_none()
-    if article is None:
-        return TodayArticleResponse(has_article=False, article=None)
-    article = await reconcile_article_record(db, user_id=current_user.id, article=article)
-    await db.commit()
-    await db.refresh(article)
-    return TodayArticleResponse(has_article=True, article=ArticleResponse.model_validate(article))
+    return await get_today_article_response(db, current_user=current_user)
 
 
 @router.post("/today/generate", response_model=ArticleResponse)
 async def generate_today_article(
+    db: DbSession,
+    current_user: CurrentUser,
     request: GenerateArticleRequest | None = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
-) -> Any:
-    """生成或重新生成今日文章。"""
-    target_date = request.target_date if request and request.target_date else date.today()
-    force_regenerate = bool(request and request.force_regenerate)
-
-    result = await db.execute(
-        select(Article)
-        .where(Article.user_id == current_user.id)
-        .where(Article.publish_date == target_date)
+) -> ArticleResponse:
+    """生成或重新生成今天的文章。"""
+    article = await generate_today_article_for_user(
+        db,
+        current_user=current_user,
+        request=request,
     )
-    existing = result.scalar_one_or_none()
-    if existing and not force_regenerate:
-        existing = await reconcile_article_record(db, user_id=current_user.id, article=existing)
-        await db.commit()
-        await db.refresh(existing)
-        return existing
+    return ArticleResponse.model_validate(article)
 
-    if not current_user.has_completed_assessment:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="请先完成英语水平评测",
-        )
 
-    from app.db.redis import get_redis
+@router.get("/path", response_model=LearningPathResponse)
+async def get_learning_path(
+    db: DbSession,
+    current_user: CurrentUser,
+) -> LearningPathResponse:
+    """获取学习路径。"""
+    payload = await article_proposal_service.get_learning_path(db, user_id=current_user.id)
+    return LearningPathResponse.model_validate(payload)
 
-    redis_client = await get_redis()
-    lock_key = f"lock:generate_article:{current_user.id}:{target_date.isoformat()}"
 
-    async with redis_client.lock(lock_key, timeout=120, blocking_timeout=120):
-        retry_result = await db.execute(
-            select(Article)
-            .where(Article.user_id == current_user.id)
-            .where(Article.publish_date == target_date)
-        )
-        existing_after_lock = retry_result.scalar_one_or_none()
-
-        if existing_after_lock and not force_regenerate:
-            existing_after_lock = await reconcile_article_record(
-                db,
-                user_id=current_user.id,
-                article=existing_after_lock,
-            )
-            await db.commit()
-            await db.refresh(existing_after_lock)
-            return existing_after_lock
-
-        if existing_after_lock and force_regenerate and existing_after_lock.is_completed:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="文章已经完成学习，暂不支持重新生成",
-            )
-
-        user_level = int(current_user.english_level or 0)
-        learning_goals = current_user.learning_goals or []
-        custom_goal = current_user.custom_goal
-
-        (
-            recent_titles,
-            recent_topics,
-            completed_lessons,
-            vocabulary_count,
-            known_words,
-        ) = await collect_generation_context(
-            db,
-            user_id=current_user.id,
-            target_date=target_date,
-            current_article_id=existing_after_lock.id if existing_after_lock else None,
-        )
-        difficulty_bias, difficulty_note = await derive_difficulty_bias(
-            db,
-            user_id=current_user.id,
-            explicit_reason=request.feedback_reason if request else None,
-        )
-
-        try:
-            generated = await article_generator.generate(
-                user_level=user_level,
-                learning_goals=learning_goals,
-                custom_goal=custom_goal,
-                known_words=known_words,
-                target_date=target_date,
-                recent_titles=recent_titles,
-                recent_topics=recent_topics,
-                completed_lessons=completed_lessons,
-                vocabulary_count=vocabulary_count,
-                feedback_reason=request.feedback_reason if request else None,
-                feedback_comment=request.feedback_comment if request else None,
-                difficulty_bias=difficulty_bias,
-                difficulty_note=difficulty_note,
-            )
-            generated = await normalize_generated_article(
-                db,
-                user_id=current_user.id,
-                generated=generated,
-            )
-        except Exception as exc:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"文章生成失败: {exc}",
-            ) from exc
-
-        if existing_after_lock:
-            article = apply_generated_article(
-                existing_after_lock,
-                generated,
-                target_date,
-                reset_progress=force_regenerate,
-            )
-        else:
-            article = apply_generated_article(
-                Article(user_id=current_user.id, created_at=datetime.utcnow()),
-                generated,
-                target_date,
-                reset_progress=False,
-            )
-            db.add(article)
-
-        if force_regenerate and request and request.feedback_reason:
-            db.add(
-                LearningFeedback(
-                    user_id=current_user.id,
-                    article_id=existing_after_lock.id if existing_after_lock else None,
-                    module="lesson",
-                    feedback_type=request.feedback_reason,
-                    comment=request.feedback_comment,
-                    payload={
-                        "target_date": target_date.isoformat(),
-                        "previous_title": existing_after_lock.title
-                        if existing_after_lock
-                        else None,
-                        "difficulty_bias": difficulty_bias,
-                    },
-                )
-            )
-
-        try:
-            await db.commit()
-            await db.refresh(article)
-        except IntegrityError:
-            await db.rollback()
-            race_result = await db.execute(
-                select(Article)
-                .where(Article.user_id == current_user.id)
-                .where(Article.publish_date == target_date)
-            )
-            race_article = race_result.scalar_one_or_none()
-            if race_article is not None:
-                return race_article
-            raise
-
-        import asyncio
-
-        asyncio.create_task(tts_service.warmup_article_audio(article.id, generated))
-        return article
+@router.post("/proposals/{proposal_id}/realize", response_model=ArticleResponse)
+async def realize_article_proposal(
+    proposal_id: int,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> ArticleResponse:
+    """将学习路径中的建议节点转化为正式文章。"""
+    article = await article_proposal_service.realize_proposal(
+        db,
+        user_id=current_user.id,
+        proposal_id=proposal_id,
+    )
+    return ArticleResponse.model_validate(article)
 
 
 @router.get("/history", response_model=ArticleListResponse)
 async def get_article_history(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=50),
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
-) -> Any:
+    pagination: StandardPagination,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> ArticleListResponse:
     """获取历史文章。"""
-    offset = (page - 1) * page_size
-    count_result = await db.execute(
-        select(func.count()).select_from(Article).where(Article.user_id == current_user.id)
-    )
-    total = int(count_result.scalar_one())
-
-    result = await db.execute(
-        select(Article)
-        .where(Article.user_id == current_user.id)
-        .order_by(desc(Article.publish_date), desc(Article.created_at))
-        .offset(offset)
-        .limit(page_size)
-    )
-    items = result.scalars().all()
-
-    return ArticleListResponse(
-        items=[ArticleListItem.model_validate(item) for item in items],
-        total=total,
+    return await get_article_history_response(
+        db,
+        user_id=current_user.id,
+        page=pagination.page,
+        page_size=pagination.page_size,
     )
 
 
 @router.get("/{article_id}", response_model=ArticleResponse)
 async def get_article_detail(
     article_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
-) -> Any:
+    response: Response,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> ArticleResponse:
     """获取文章详情。"""
-    result = await db.execute(
-        select(Article).where(Article.id == article_id).where(Article.user_id == current_user.id)
-    )
-    article = result.scalar_one_or_none()
-    if article is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文章不存在")
-
-    article = await reconcile_article_record(db, user_id=current_user.id, article=article)
-    await db.commit()
-    await db.refresh(article)
-
-    return JSONResponse(
-        content=ArticleResponse.model_validate(article).model_dump(mode="json"),
-        headers={"Cache-Control": "private, max-age=604800"},
+    response.headers["Cache-Control"] = "private, max-age=604800"
+    return await get_article_detail_response(
+        db,
+        user_id=current_user.id,
+        article_id=article_id,
     )
 
 
 @router.post("/{article_id}/audio")
 async def generate_article_audio(
     article_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
-) -> Any:
+    db: DbSession,
+    current_user: CurrentUser,
+) -> Response:
     """生成文章音频。"""
-    result = await db.execute(
-        select(Article).where(Article.id == article_id).where(Article.user_id == current_user.id)
+    audio_bytes = await generate_article_audio_bytes(
+        db,
+        user_id=current_user.id,
+        article_id=article_id,
     )
-    article = result.scalar_one_or_none()
-    if article is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文章不存在")
-
-    article_content = ArticleContent(
-        title=article.title,
-        level=article.level,
-        source_book=article.source_book,
-        source_lesson=article.source_lesson,
-        vocabulary=[VocabularyWord(**item) for item in (article.vocabulary or [])],
-        content=[BilingualContent(**item) for item in (article.content or [])],
-        grammar=[GrammarPoint(**item) for item in (article.grammar or [])],
-        tips=[CultureTip(**item) for item in (article.tips or [])],
-        exercises=[Exercise(**item) for item in (article.exercises or [])],
+    return Response(
+        content=audio_bytes,
+        media_type="audio/mpeg",
+        headers={
+            "Cache-Control": "private, max-age=2592000, immutable",
+            "Content-Disposition": f'inline; filename="article_{article_id}.mp3"',
+        },
     )
-
-    try:
-        from fastapi import Response
-
-        audio_bytes = await tts_service.generate_article_audio_bytes(article_content, article_id)
-        return Response(
-            content=audio_bytes,
-            media_type="audio/mpeg",
-            headers={
-                "Cache-Control": "private, max-age=2592000, immutable",
-                "Content-Disposition": f'inline; filename="article_{article_id}.mp3"',
-            },
-        )
-    except ImportError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="TTS 服务当前不可用",
-        ) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"音频生成失败: {exc}",
-        ) from exc
 
 
 @router.get("/{article_id}/audio-timeline", response_model=ArticleAudioTimelineResponse)
-async def get_article_audio_timeline(
+async def get_article_audio_timeline_endpoint(
     article_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
-) -> Any:
-    """获取全文朗读时间轴。"""
-    result = await db.execute(
-        select(Article).where(Article.id == article_id).where(Article.user_id == current_user.id)
+    db: DbSession,
+    current_user: CurrentUser,
+) -> ArticleAudioTimelineResponse:
+    """获取文章整篇音频时间轴。"""
+    return await get_article_audio_timeline(
+        db,
+        user_id=current_user.id,
+        article_id=article_id,
     )
-    article = result.scalar_one_or_none()
-    if article is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="鏂囩珷涓嶅瓨鍦?")
-
-    article_content = ArticleContent(
-        title=article.title,
-        level=article.level,
-        source_book=article.source_book,
-        source_lesson=article.source_lesson,
-        vocabulary=[VocabularyWord(**item) for item in (article.vocabulary or [])],
-        content=[BilingualContent(**item) for item in (article.content or [])],
-        grammar=[GrammarPoint(**item) for item in (article.grammar or [])],
-        tips=[CultureTip(**item) for item in (article.tips or [])],
-        exercises=[Exercise(**item) for item in (article.exercises or [])],
-    )
-
-    try:
-        timeline = await tts_service.get_article_audio_timeline(article_content, article_id)
-    except ImportError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="TTS 鏈嶅姟褰撳墠涓嶅彲鐢?",
-        ) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"鏃堕棿杞存瀯寤哄け璐?: {exc}",
-        ) from exc
-
-    return ArticleAudioTimelineResponse.model_validate({"segments": timeline})
 
 
 @router.patch("/{article_id}/progress", response_model=ArticleResponse)
 async def update_article_progress(
     article_id: int,
     request: UpdateProgressRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
-) -> Any:
-    """更新文章阅读进度并沉淀练习结果。"""
-    result = await db.execute(
-        select(Article).where(Article.id == article_id).where(Article.user_id == current_user.id)
+    db: DbSession,
+    current_user: CurrentUser,
+) -> ArticleResponse:
+    """更新文章阅读进度和练习结果。"""
+    article = await update_article_progress_for_user(
+        db,
+        user_id=current_user.id,
+        article_id=article_id,
+        request=request,
     )
-    article = result.scalar_one_or_none()
-    if article is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文章不存在")
+    return ArticleResponse.model_validate(article)
 
-    article.is_read = request.is_read
 
-    for item in request.exercise_results or []:
-        item_type = infer_mistake_item_type(item.expected_answer)
-        if item.is_correct:
-            await mistake_service.mark_mastered(
-                db,
-                user_id=current_user.id,
-                item_type=item_type,
-                target_text=item.expected_answer,
-            )
-            continue
+@router.post("/{article_id}/mini-story/generate", response_model=MiniStoryResponse)
+async def generate_article_mini_story(
+    article_id: int,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> MiniStoryResponse:
+    """生成本课变种小故事及问答题。"""
+    article = await get_user_article(db, user_id=current_user.id, article_id=article_id)
+    return await mini_story_service.generate_story(article)
 
-        await mistake_service.record_mistake(
-            db,
-            user_id=current_user.id,
-            source_type="article",
-            item_type=item_type,
-            target_text=item.expected_answer,
-            prompt_text=item.question,
-            user_answer=item.user_answer,
-            context_text=article.title,
-        )
 
-    if request.is_completed is not None:
-        was_completed = article.is_completed
-        article.is_completed = request.is_completed
-
-        if request.is_completed and not was_completed:
-            await study_log_service.check_in(db, current_user.id, course_title=article.title)
-
-            existing_words_result = await db.execute(
-                select(Vocabulary.word).where(Vocabulary.user_id == current_user.id)
-            )
-            existing_words = {row[0] for row in existing_words_result.all()}
-            new_entries: list[Vocabulary] = []
-
-            for vocab in article.vocabulary or []:
-                word = vocab.get("word")
-                if not word or word in existing_words:
-                    continue
-                new_entries.append(
-                    Vocabulary(
-                        user_id=current_user.id,
-                        article_id=article.id,
-                        word=word,
-                        uk_phonetic=vocab.get("uk_phonetic"),
-                        us_phonetic=vocab.get("us_phonetic"),
-                        meaning=vocab.get("meaning", ""),
-                        created_at=datetime.utcnow(),
-                    )
-                )
-                existing_words.add(word)
-
-            if new_entries:
-                db.add_all(new_entries)
-
-            await review_service.create_review_schedule(db, current_user.id, article.id)
-
-    article.updated_at = datetime.utcnow()
-    await db.commit()
-    await db.refresh(article)
-    return article
+@router.post("/{article_id}/mini-story/evaluate", response_model=MiniStoryEvaluateResponse)
+async def evaluate_article_mini_story(
+    article_id: int,
+    request: MiniStoryEvaluateRequest,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> MiniStoryEvaluateResponse:
+    """校验小故事概述问答。"""
+    await get_user_article(db, user_id=current_user.id, article_id=article_id)
+    return await mini_story_service.evaluate_answers(
+        story_en=request.story_en,
+        questions=request.questions,
+        answers=request.answers,
+    )

@@ -6,16 +6,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
-from app.db.database import get_db
-from app.models.article import Article
-from app.schemas.user import UserInfo
+from app.api.deps import CurrentUser, DbSession
+from app.services.ai_chat_context_service import (
+    resolve_lesson_article_context,
+    resolve_sentence_breakdown_context,
+)
 from app.services.ai_chat_service import ai_chat_service
 from app.services.sentence_helper_service import (
     SentenceBreakdownResult,
@@ -47,78 +46,20 @@ class SentenceBreakdownRequest(BaseModel):
     paragraph_index: int | None = Field(None, ge=0, description="句子所在段落索引")
 
 
-def build_article_context(article: Article, paragraph_index: int | None = None) -> dict[str, Any]:
-    """构造课文上下文。"""
-    paragraph_context: dict[str, Any] = {}
-    if (
-        paragraph_index is not None
-        and article.content
-        and 0 <= paragraph_index < len(article.content)
-    ):
-        paragraph = article.content[paragraph_index]
-        paragraph_context = {
-            "paragraph_en": paragraph.get("en"),
-            "paragraph_zh": paragraph.get("zh"),
-            "speaker": paragraph.get("speaker"),
-        }
-
-    return {
-        "title": article.title,
-        "level": article.level,
-        "vocabulary": [item.get("word") for item in (article.vocabulary or [])][:5],
-        "grammar": [item.get("point") for item in (article.grammar or [])][:2],
-        "summary": article.content[0]["en"] if article.content else "",
-        **paragraph_context,
-    }
-
-
-async def get_owned_article(
-    db: AsyncSession,
-    *,
-    article_id: int,
-    user_id: int,
-) -> Article:
-    """读取当前用户自己的文章。"""
-    result = await db.execute(
-        select(Article).where(Article.id == article_id).where(Article.user_id == user_id)
-    )
-    article = result.scalar_one_or_none()
-    if article is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="文章不存在",
-        )
-    return article
-
-
-async def resolve_article_context(
-    request: AIChatRequest,
-    db: AsyncSession,
-    current_user: UserInfo,
-) -> dict[str, Any] | None:
-    """解析课文上下文。"""
-    article_context: dict[str, Any] | None = None
-    if request.mode != "lesson":
-        return article_context
-
-    if request.article_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="课文对话模式需要 article_id",
-        )
-
-    article = await get_owned_article(db, article_id=request.article_id, user_id=current_user.id)
-    return build_article_context(article)
-
-
 @router.post("/respond", response_model=AIChatResponse, summary="获取 AI 对话回复")
 async def respond_ai_chat(
     request: AIChatRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
+    db: DbSession,
+    current_user: CurrentUser,
 ) -> Any:
     """根据课文上下文或通用问题返回 AI 回复。"""
-    article_context = await resolve_article_context(request, db, current_user)
+    article_context = None
+    if request.mode == "lesson":
+        article_context = await resolve_lesson_article_context(
+            db,
+            user_id=current_user.id,
+            article_id=request.article_id,
+        )
     reply = await ai_chat_service.reply(
         mode=request.mode,
         message=request.message,
@@ -132,11 +73,17 @@ async def respond_ai_chat(
 @router.post("/respond/stream", summary="流式获取 AI 对话回复")
 async def respond_ai_chat_stream(
     request: AIChatRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
+    db: DbSession,
+    current_user: CurrentUser,
 ) -> StreamingResponse:
     """流式返回 AI 回复。"""
-    article_context = await resolve_article_context(request, db, current_user)
+    article_context = None
+    if request.mode == "lesson":
+        article_context = await resolve_lesson_article_context(
+            db,
+            user_id=current_user.id,
+            article_id=request.article_id,
+        )
 
     async def event_stream():
         async for chunk in ai_chat_service.stream_reply(
@@ -162,25 +109,16 @@ async def respond_ai_chat_stream(
 )
 async def get_sentence_breakdown(
     request: SentenceBreakdownRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
+    db: DbSession,
+    current_user: CurrentUser,
 ) -> SentenceBreakdownResult:
     """对课文中的句子做结构化拆解。"""
-    article_context: dict[str, Any] | None = None
-
-    if request.article_id is not None:
-        article = await get_owned_article(
-            db, article_id=request.article_id, user_id=current_user.id
-        )
-        if request.paragraph_index is not None and (
-            request.paragraph_index < 0 or request.paragraph_index >= len(article.content or [])
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="段落索引超出范围",
-            )
-        article_context = build_article_context(article, request.paragraph_index)
-
+    article_context = await resolve_sentence_breakdown_context(
+        db,
+        user_id=current_user.id,
+        article_id=request.article_id,
+        paragraph_index=request.paragraph_index,
+    )
     return await sentence_helper_service.analyze(
         sentence=request.sentence,
         user_level=current_user.english_level,

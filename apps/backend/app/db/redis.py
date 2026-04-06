@@ -1,6 +1,8 @@
 """
-Redis 连接与认证缓存工具。
+Redis 连接与缓存工具。
 """
+
+from __future__ import annotations
 
 import redis.asyncio as redis
 
@@ -27,7 +29,7 @@ async def close_redis() -> None:
 
 
 async def get_redis() -> redis.Redis:
-    """获取 Redis 连接。"""
+    """获取 Redis 客户端。"""
     global redis_pool
     if redis_pool is None:
         await init_redis()
@@ -48,26 +50,26 @@ def _refresh_token_key(token_id: str) -> str:
 
 
 async def set_sms_code(phone: str, code: str, expire: int = 300) -> None:
-    """存储验证码到 Redis。"""
+    """保存短信验证码。"""
     redis_client = await get_redis()
     await redis_client.setex(_sms_code_key(phone), expire, code)
 
 
 async def get_sms_code(phone: str) -> str | None:
-    """从 Redis 获取验证码。"""
+    """读取短信验证码。"""
     redis_client = await get_redis()
     result: str | None = await redis_client.get(_sms_code_key(phone))
     return result
 
 
 async def delete_sms_code(phone: str) -> None:
-    """删除验证码。"""
+    """删除短信验证码。"""
     redis_client = await get_redis()
     await redis_client.delete(_sms_code_key(phone))
 
 
 async def is_code_sent_recently(phone: str, interval: int = 60) -> bool:
-    """检查短时间内是否已经发送过验证码。"""
+    """检查短时间内是否已发送过验证码。"""
     redis_client = await get_redis()
     exists = await redis_client.exists(_sms_sent_key(phone))
     if not exists:
@@ -77,7 +79,7 @@ async def is_code_sent_recently(phone: str, interval: int = 60) -> bool:
 
 
 async def store_refresh_token(token_id: str, user_id: int, expire_seconds: int) -> None:
-    """记录当前有效的刷新令牌标识。"""
+    """登记有效刷新令牌。"""
     redis_client = await get_redis()
     await redis_client.setex(_refresh_token_key(token_id), expire_seconds, str(user_id))
 

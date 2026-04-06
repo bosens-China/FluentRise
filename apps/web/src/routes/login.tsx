@@ -130,7 +130,9 @@ function LoginForm() {
     try {
       await sendCode({ phone });
       setCountdown(60);
-    } catch {}
+    } catch {
+      return;
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -147,7 +149,9 @@ function LoginForm() {
 
     try {
       await login({ phone, code });
-    } catch {}
+    } catch {
+      return;
+    }
   };
 
   return (
