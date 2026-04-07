@@ -11,8 +11,8 @@ dist/
 .rspack-profile-*/
 
 # IDE
-.vscode/*
-!.vscode/extensions.json
+# .vscode/*
+# !.vscode/extensions.json
 .idea
 
 .agent
