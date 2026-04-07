@@ -3,16 +3,19 @@
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
     """应用配置。"""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(BACKEND_DIR / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -20,10 +23,12 @@ class Settings(BaseSettings):
     APP_NAME: str = "FluentRise Backend"
     APP_VERSION: str = "0.1.0"
     APP_TIMEZONE: str = "Asia/Shanghai"
-    DEBUG: bool = True
+    DEBUG: bool = False
     ENVIRONMENT: str = "development"
+    ENABLE_DOCS: bool | None = None
+    ENABLE_OPENAPI: bool | None = None
 
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    SECRET_KEY: str = "CHANGE_ME_IN_ENV"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
 
@@ -76,10 +81,13 @@ class Settings(BaseSettings):
         """非开发环境必须配置安全密钥。"""
         insecure_values = {
             "",
-            "your-secret-key-change-in-production",
             "CHANGE_ME",
             "CHANGE_ME_IN_ENV",
         }
+        if self.ENABLE_DOCS is None:
+            self.ENABLE_DOCS = self.ENVIRONMENT != "production"
+        if self.ENABLE_OPENAPI is None:
+            self.ENABLE_OPENAPI = self.ENABLE_DOCS
         if self.ENVIRONMENT != "development" and self.SECRET_KEY in insecure_values:
             raise ValueError("生产环境必须配置安全的 SECRET_KEY")
         return self

@@ -144,7 +144,7 @@ async def list_due_review_items(
         )
         .order_by(ReviewSchedule.next_review_date)
     )
-    return list(result.all())
+    return [(schedule, article) for schedule, article in result.all()]
 
 
 async def count_weekly_completed_reviews(

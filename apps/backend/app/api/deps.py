@@ -11,7 +11,7 @@ from fastapi import Depends, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ForbiddenError, NotFoundError, UnauthorizedError
+from app.core.exceptions import ForbiddenError, UnauthorizedError
 from app.core.security import decode_token
 from app.db.database import get_db
 from app.repositories.user_repository import get_user_by_id
@@ -44,9 +44,14 @@ async def get_current_user(
     if not user_id:
         raise UnauthorizedError("无效的认证凭证")
 
-    user = await get_user_by_id(db, user_id=int(user_id))
+    try:
+        parsed_user_id = int(user_id)
+    except (TypeError, ValueError) as exc:
+        raise UnauthorizedError("无效的认证凭证") from exc
+
+    user = await get_user_by_id(db, user_id=parsed_user_id)
     if user is None:
-        raise NotFoundError("用户不存在")
+        raise UnauthorizedError("无效的认证凭证")
 
     if not user.is_active:
         raise ForbiddenError("用户已被禁用")

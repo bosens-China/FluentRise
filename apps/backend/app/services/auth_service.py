@@ -75,19 +75,24 @@ class AuthService:
 
     @staticmethod
     async def get_or_create_user(*, db: AsyncSession, phone: str) -> User:
-        user = await get_user_by_phone(db, phone=phone)
+        async with db.begin():
+            user = await get_user_by_phone(db, phone=phone)
 
-        if user is None:
-            user = User(phone=phone, is_active=True, is_verified=True)
-            db.add(user)
-            await db.commit()
-            await db.refresh(user)
-        else:
-            user.last_login_at = utc_now()
-            await db.commit()
-            await db.refresh(user)
+            if user is None:
+                user = User(
+                    phone=phone,
+                    is_active=True,
+                    is_verified=True,
+                    last_login_at=utc_now(),
+                )
+                db.add(user)
+                await db.flush()
+            else:
+                user.last_login_at = utc_now()
 
-        await membership_service.ensure_membership(db=db, user_id=user.id)
+            await membership_service.ensure_membership(db=db, user_id=user.id, commit=False)
+
+        await db.refresh(user)
         return user
 
     @staticmethod

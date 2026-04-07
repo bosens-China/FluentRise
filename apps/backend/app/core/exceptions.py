@@ -10,9 +10,16 @@ class AppError(Exception):
 
     status_code = 500
     detail = "服务器内部错误"
+    headers: dict[str, str] | None = None
 
-    def __init__(self, detail: str | None = None) -> None:
+    def __init__(
+        self,
+        detail: str | None = None,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.detail = detail or self.detail
+        self.headers = headers or self.headers
         super().__init__(self.detail)
 
 
@@ -24,6 +31,9 @@ class BadRequestError(AppError):
 class UnauthorizedError(AppError):
     status_code = 401
     detail = "未授权"
+
+    def __init__(self, detail: str | None = None) -> None:
+        super().__init__(detail, headers={"WWW-Authenticate": "Bearer"})
 
 
 class ForbiddenError(AppError):

@@ -2,7 +2,7 @@
 name = "fluentrise-backend"
 version = "0.1.0"
 description = "FluentRise 学习平台后端服务"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi[standard]>=0.115.0",
     "uvicorn[standard]>=0.32.0",
@@ -56,6 +56,9 @@ format = "ruff format ."
 typecheck = "pyright"
 migrate_up = "alembic -c alembic.ini upgrade head"
 migrate_down = "alembic -c alembic.ini downgrade -1"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
 
 [dependency-groups]
 dev = ["pyright>=1.1.408", "taskipy>=1.14.1"]

@@ -4,6 +4,8 @@ Redis 连接与缓存工具。
 
 from __future__ import annotations
 
+from inspect import isawaitable
+
 import redis.asyncio as redis
 
 from app.core.config import settings
@@ -35,6 +37,14 @@ async def get_redis() -> redis.Redis:
         await init_redis()
     assert redis_pool is not None
     return redis_pool
+
+
+async def check_redis_connection() -> None:
+    """检查 Redis 连通性。"""
+    redis_client = await get_redis()
+    result = redis_client.ping()
+    if isawaitable(result):
+        await result
 
 
 def _sms_code_key(phone: str) -> str:

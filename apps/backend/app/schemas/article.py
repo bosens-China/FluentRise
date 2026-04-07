@@ -187,7 +187,7 @@ class MiniStoryEvaluateRequest(BaseModel):
     """校验小故事概述/问答请求。"""
 
     story_en: str = Field(..., description="小故事原文")
-    questions: list[dict[str, str]] = Field(..., description="问题列表 (必须包含 id, question_en)")
+    questions: list[MiniStoryQuestionResponse] = Field(..., description="问题列表")
     answers: dict[str, str] = Field(..., description="用户答案 (question_id -> user_answer)")
 
 

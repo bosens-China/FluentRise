@@ -10,7 +10,11 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
 from app.models.article import Article
-from app.schemas.article import MiniStoryEvaluateResponse, MiniStoryResponse
+from app.schemas.article import (
+    MiniStoryEvaluateResponse,
+    MiniStoryQuestionResponse,
+    MiniStoryResponse,
+)
 from app.services.llm_factory import build_chat_model
 
 
@@ -82,11 +86,11 @@ class MiniStoryService:
                 story_en=content.story_en,
                 story_zh=content.story_zh,
                 questions=[
-                    {
-                        "id": q.id,
-                        "question_en": q.question_en,
-                        "question_zh": q.question_zh,
-                    }
+                    MiniStoryQuestionResponse(
+                        id=q.id,
+                        question_en=q.question_en,
+                        question_zh=q.question_zh,
+                    )
                     for q in content.questions
                 ],
             )
@@ -96,15 +100,15 @@ class MiniStoryService:
     async def evaluate_answers(
         self,
         story_en: str,
-        questions: list[dict[str, str]],
+        questions: list[MiniStoryQuestionResponse],
         answers: dict[str, str],
     ) -> MiniStoryEvaluateResponse:
         """评估用户对小故事的作答。"""
         qa_pairs = []
         for q in questions:
-            qid = q.get("id", "")
+            qid = q.id
             user_ans = answers.get(qid, "（未作答）")
-            qa_pairs.append(f"问题: {q.get('question_en')}\n用户回答: {user_ans}")
+            qa_pairs.append(f"问题: {q.question_en}\n用户回答: {user_ans}")
 
         qa_str = "\n\n".join(qa_pairs)
 

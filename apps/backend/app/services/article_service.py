@@ -89,7 +89,8 @@ async def reconcile_article_record(
             exercises=[Exercise.model_validate(item) for item in (article.exercises or [])],
         ),
     )
-    return apply_generated_article(article, normalized, article.publish_date, reset_progress=False)
+    target_date = article.publish_date or utc_now().date()
+    return apply_generated_article(article, normalized, target_date, reset_progress=False)
 
 
 def _normalize_text(value: str) -> str:

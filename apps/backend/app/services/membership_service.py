@@ -19,9 +19,15 @@ class MembershipService:
     TRIAL_DAYS = 7
 
     @staticmethod
-    async def ensure_membership(*, db: AsyncSession, user_id: int) -> Membership:
+    async def ensure_membership(
+        *,
+        db: AsyncSession,
+        user_id: int,
+        commit: bool = True,
+    ) -> Membership:
         """确保用户存在会员记录。"""
         membership = await get_membership_by_user_id(db, user_id=user_id)
+        changed = False
 
         if membership is None:
             now = utc_now()
@@ -33,14 +39,18 @@ class MembershipService:
                 expires_at=now + timedelta(days=MembershipService.TRIAL_DAYS),
             )
             db.add(membership)
-            await db.commit()
-            await db.refresh(membership)
-            return membership
+            changed = True
 
-        if membership.expires_at <= utc_now() and membership.status != "expired":
+        elif membership.expires_at <= utc_now() and membership.status != "expired":
             membership.status = "expired"
+
+            changed = True
+
+        if changed and commit:
             await db.commit()
             await db.refresh(membership)
+        elif changed:
+            await db.flush()
 
         return membership
 
