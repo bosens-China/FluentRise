@@ -274,21 +274,6 @@ body {
   border-radius: 3px;
 }
 
-/* 文本截断优化 */
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.line-clamp-6 {
-  display: -webkit-box;
-  -webkit-line-clamp: 6;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
 /* 触摸设备优化 */
 @media (pointer: coarse) {
   /* 增大触摸目标 */

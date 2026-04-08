@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.api.deps import CurrentUser
@@ -18,13 +16,12 @@ router = APIRouter(prefix="/speech", tags=["朗读解析"])
 
 @router.post("/analyze", response_model=SpeechAnalyzeResponse, summary="解析录音内容")
 async def analyze_speech(
-    current_user: CurrentUser,
+    _current_user: CurrentUser,
     file: UploadFile = File(...),
     language: str = Form(default=settings.SPEECH_DEFAULT_LANGUAGE),
     reference_text: str | None = Form(default=None),
-) -> Any:
+) -> SpeechAnalyzeResponse:
     """上传录音并返回识别与宽松反馈。"""
-    del current_user
 
     if file.content_type not in settings.SPEECH_ACCEPTED_CONTENT_TYPES:
         accepted_types = ", ".join(settings.SPEECH_ACCEPTED_CONTENT_TYPES)

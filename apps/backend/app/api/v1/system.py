@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import random
-from typing import Any
 
 from fastapi import APIRouter
 
@@ -45,6 +44,12 @@ ENCOURAGING_QUOTES = [
 ]
 
 
+def _get_random_quotes(count: int) -> list[Quote]:
+    """随机获取鼓励语录。"""
+    actual_count = min(max(count, 1), len(ENCOURAGING_QUOTES))
+    return [Quote.model_validate(item) for item in random.sample(ENCOURAGING_QUOTES, actual_count)]
+
+
 @router.get("/config", response_model=SystemConfigResponse, summary="获取系统能力配置")
 async def get_system_config() -> SystemConfigResponse:
     """返回前端可消费的系统能力与限制配置。"""
@@ -54,8 +59,7 @@ async def get_system_config() -> SystemConfigResponse:
 @router.get("/quotes", response_model=list[Quote], summary="获取鼓励语录")
 async def get_quotes(count: int = 5) -> list[Quote]:
     """随机获取鼓励语录。"""
-    actual_count = min(max(count, 1), len(ENCOURAGING_QUOTES))
-    return [Quote.model_validate(item) for item in random.sample(ENCOURAGING_QUOTES, actual_count)]
+    return _get_random_quotes(count)
 
 
 @router.post("/encouragement", response_model=EncouragementResult, summary="生成鼓励文案")
@@ -63,7 +67,7 @@ async def generate_encouragement(
     request: EncouragementRequest,
     db: DbSession,
     current_user: CurrentUser,
-) -> Any:
+) -> EncouragementResult:
     """生成中英文鼓励文案。"""
     streak_days = request.streak_days
     if streak_days is None:

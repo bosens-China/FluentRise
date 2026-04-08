@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { App } from 'antd';
 
 import { generateArticleAudio, type Article } from '@/api/article';
@@ -23,23 +23,26 @@ export function useArticleReviewAudio({
   } = useAudioPlayer();
   const [reviewAudioUrl, setReviewAudioUrl] = useState<string | null>(null);
   const [reviewAudioLoading, setReviewAudioLoading] = useState(false);
+  const prevAudioUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     return () => {
-      if (reviewAudioUrl) {
-        URL.revokeObjectURL(reviewAudioUrl);
+      if (prevAudioUrlRef.current) {
+        URL.revokeObjectURL(prevAudioUrlRef.current);
       }
     };
-  }, [reviewAudioUrl]);
+  }, []);
 
   useEffect(() => {
-    if (reviewAudioUrl) {
-      URL.revokeObjectURL(reviewAudioUrl);
-      setReviewAudioUrl(null);
+    const previous = prevAudioUrlRef.current;
+    if (previous) {
+      URL.revokeObjectURL(previous);
+      prevAudioUrlRef.current = null;
     }
+    setReviewAudioUrl(null);
     stopReviewAudio();
     setReviewAudioLoading(false);
-  }, [articleId, isReviewMode, reviewAudioUrl, stopReviewAudio]);
+  }, [articleId, isReviewMode, stopReviewAudio]);
 
   const playReviewAudio = useCallback(async () => {
     if (!currentArticle) {
@@ -55,6 +58,7 @@ export function useArticleReviewAudio({
           if (previous) {
             URL.revokeObjectURL(previous);
           }
+          prevAudioUrlRef.current = nextUrl;
           return nextUrl;
         });
       }

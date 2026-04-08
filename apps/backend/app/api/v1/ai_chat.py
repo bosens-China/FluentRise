@@ -4,13 +4,11 @@ AI 对话与句子拆解 API。
 
 from __future__ import annotations
 
-from typing import Any
-
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 
 from app.api.deps import CurrentUser, DbSession
+from app.schemas.ai_chat import AIChatRequest, AIChatResponse, SentenceBreakdownRequest
 from app.services.ai_chat_context_service import (
     resolve_lesson_article_context,
     resolve_sentence_breakdown_context,
@@ -24,34 +22,12 @@ from app.services.sentence_helper_service import (
 router = APIRouter(prefix="/ai-chat", tags=["AI 对话"])
 
 
-class AIChatRequest(BaseModel):
-    """AI 对话请求。"""
-
-    mode: str = Field(..., description="lesson 或 general")
-    message: str = Field(..., min_length=1, description="用户消息")
-    article_id: int | None = Field(None, description="课文模式下的文章 ID")
-
-
-class AIChatResponse(BaseModel):
-    """AI 对话响应。"""
-
-    reply: str = Field(..., description="AI 回复")
-
-
-class SentenceBreakdownRequest(BaseModel):
-    """句子拆解请求。"""
-
-    sentence: str = Field(..., min_length=1, description="待拆解的英文句子")
-    article_id: int | None = Field(None, description="文章 ID")
-    paragraph_index: int | None = Field(None, ge=0, description="句子所在段落索引")
-
-
 @router.post("/respond", response_model=AIChatResponse, summary="获取 AI 对话回复")
 async def respond_ai_chat(
     request: AIChatRequest,
     db: DbSession,
     current_user: CurrentUser,
-) -> Any:
+) -> AIChatResponse:
     """根据课文上下文或通用问题返回 AI 回复。"""
     article_context = None
     if request.mode == "lesson":

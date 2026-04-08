@@ -1,7 +1,7 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { useRequest } from 'ahooks';
-import { Alert, App, Button, Col, Row, Typography } from 'antd';
+import { App, Col, Row, Typography } from 'antd';
 import dayjs from 'dayjs';
 
 import { getLearningPath, realizeProposal, type ArticleProposal } from '@/api/article';
@@ -17,15 +17,20 @@ import { LearningPath } from '@/components/home/LearningPath';
 import { LearningProfileCard } from '@/components/home/LearningProfileCard';
 import { MembershipGuideCard } from '@/components/home/MembershipGuideCard';
 import { QuickEntryCard } from '@/components/home/QuickEntryCard';
-import { TaskPlannerCard } from '@/components/home/TaskPlannerCard';
+import { ReviewSection } from '@/components/home/ReviewSection';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { ReviewReminderModal } from '@/components/review/ReviewReminderModal';
 import { StudyCalendar } from '@/components/studyLog/StudyCalendar';
 import { useCurrentUser } from '@/hooks/useAuth';
+import { isAuthenticated } from '@/lib/auth-storage';
 
 const { Text, Title } = Typography;
 
 export const Route = createFileRoute('/')({
+  beforeLoad: () => {
+    if (!isAuthenticated()) {
+      throw redirect({ to: '/login' });
+    }
+  },
   component: HomePage,
 });
 
@@ -43,7 +48,6 @@ function HomePage() {
   const navigate = useNavigate();
   const { message } = App.useApp();
   const { user, isLoading, refresh } = useCurrentUser();
-  const [reviewSummaryOpen, setReviewSummaryOpen] = useState(false);
   const [showAssessment, setShowAssessment] = useState(false);
   const [membership, setMembership] = useState<MembershipStatus | null>(null);
 
@@ -74,11 +78,6 @@ function HomePage() {
     },
     {
       ready: hasCompletedAssessment,
-      onSuccess: (data) => {
-        if (data.reviewItems.length > 0) {
-          window.setTimeout(() => setReviewSummaryOpen(true), 1000);
-        }
-      },
       onError: () => {
         message.error('首页数据加载失败，请稍后重试');
       },
@@ -116,39 +115,6 @@ function HomePage() {
   const pathData = homeRequest.data?.pathData ?? null;
   const reviewItems = homeRequest.data?.reviewItems ?? [];
 
-  const taskItems = [
-    {
-      key: 'review',
-      title: '先复习',
-      description:
-        reviewItems.length > 0
-          ? `今天有 ${reviewItems.length} 个内容该复习，建议先完成这一轮唤醒。`
-          : '今天没有到期复习，可以直接进入新课。',
-      actionLabel: reviewItems.length > 0 ? '去复习' : '查看复习中心',
-      action: () => setReviewSummaryOpen(true),
-      status: reviewItems.length > 0 ? 'todo' : 'done',
-    },
-    {
-      key: 'lesson',
-      title: '再学主课',
-      description: '点击下方的路径节点，开启你的专属关卡。建议每天至少攻克一个。',
-      actionLabel: '查看学习路径',
-      action: () => {
-        const el = document.getElementById('learning-path-section');
-        el?.scrollIntoView({ behavior: 'smooth' });
-      },
-      status: 'ready',
-    },
-    {
-      key: 'playground',
-      title: '最后做游乐园练习',
-      description: '游乐园会优先抽取今日课文、历史课文和错题本内容做巩固。',
-      actionLabel: '打开游乐园',
-      action: () => navigate({ to: '/playground' }),
-      status: 'ready',
-    },
-  ] as const;
-
   return (
     <DashboardLayout>
       <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -168,42 +134,23 @@ function HomePage() {
         </div>
       </div>
 
-      {reviewItems.length > 0 ? (
-        <Alert
-          showIcon
-          className="mb-6 rounded-3xl border-indigo-200 bg-indigo-50"
-          message={`今天有 ${reviewItems.length} 项复习任务`}
-          description={
-            homeRequest.data?.reviewSummaryMessage ||
-            '建议先完成复习，再开始今天的新课文。'
-          }
-          action={
-            <Button
-              type="primary"
-              shape="round"
-              size="middle"
-              onClick={() => setReviewSummaryOpen(true)}
-            >
-              查看复习
-            </Button>
-          }
-        />
-      ) : null}
-
       <Row gutter={[24, 24]}>
         <Col xs={24} xl={16}>
           <div className="space-y-8">
-            <TaskPlannerCard
-              loading={isLoading || homeRequest.loading}
-              hasCompletedAssessment={hasCompletedAssessment}
-              taskItems={taskItems}
-              onStartAssessment={() => setShowAssessment(true)}
+            <ReviewSection
+              reviewItems={reviewItems}
+              summaryMessage={homeRequest.data?.reviewSummaryMessage ?? ''}
+              loading={homeRequest.loading && hasCompletedAssessment}
             />
-            
-            <div id="learning-path-section" className="rounded-[40px] bg-slate-50/50 p-4 pt-10 border border-slate-100/50 min-h-[900px]">
-              <div className="text-center mb-10">
-                <Title level={3} className="!mb-2 !font-black !text-slate-800">学习小径</Title>
-                <Text className="text-slate-400">点击当前关卡开始你的英语冒险</Text>
+
+            <div id="learning-path-section" className="rounded-[40px] border border-slate-100/50 bg-slate-50/50 p-4 pt-10 min-h-[900px]">
+              <div className="mb-10 text-center">
+                <Title level={3} className="!mb-2 !font-black !text-slate-800">
+                  学习小径
+                </Title>
+                <Text className="text-slate-400">
+                  点击当前关卡开始你的英语冒险
+                </Text>
               </div>
               {pathData ? (
                 <LearningPath
@@ -213,18 +160,19 @@ function HomePage() {
                   isRealizing={isRealizing}
                 />
               ) : (
-                <div className="h-[600px] flex items-center justify-center">
-                  <Typography.Text className="text-slate-300">正在铺路...</Typography.Text>
+                <div className="flex h-[600px] items-center justify-center">
+                  <Typography.Text className="text-slate-300">
+                    正在铺路...
+                  </Typography.Text>
                 </div>
               )}
             </div>
-            
-            <StudyCalendar />
           </div>
         </Col>
 
         <Col xs={24} xl={8}>
           <div className="space-y-6">
+            <StudyCalendar />
             <AchievementPanel
               loading={homeRequest.loading && hasCompletedAssessment}
               dashboard={dashboard}
@@ -261,11 +209,6 @@ function HomePage() {
           void homeRequest.refresh();
           message.success('学习档案已经更新');
         }}
-      />
-
-      <ReviewReminderModal
-        open={reviewSummaryOpen}
-        onClose={() => setReviewSummaryOpen(false)}
       />
     </DashboardLayout>
   );

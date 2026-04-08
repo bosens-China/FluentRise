@@ -17,3 +17,5 @@ dist/
 
 .agent
 __pycache__
+CLAUDE.md
+.claude

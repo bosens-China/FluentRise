@@ -4,6 +4,7 @@ AI 对话服务。
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -11,6 +12,8 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from app.core.config import settings
 from app.services.llm_factory import build_chat_model
+
+logger = logging.getLogger(__name__)
 
 
 class AIChatService:
@@ -107,7 +110,7 @@ class AIChatService:
             if content.strip():
                 return content.strip()
         except Exception:
-            pass
+            logger.warning("AI 对话回复生成失败", exc_info=True)
 
         return self._fallback(mode, article_context)
 
@@ -146,7 +149,7 @@ class AIChatService:
             if has_output:
                 return
         except Exception:
-            pass
+            logger.warning("AI 对话流式回复生成失败", exc_info=True)
 
         yield self._fallback(mode, article_context)
 

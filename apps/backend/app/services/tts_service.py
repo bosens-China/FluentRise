@@ -29,6 +29,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def generate_cache_key(word: str, voice: str, speed: float) -> str:
+    """生成缓存 key。"""
+    content = f"{voice}:{speed}:{word.lower().strip()}"
+    return hashlib.md5(content.encode("utf-8")).hexdigest()
+
+
 FULL_TEXT_VOICE = "en-US-AriaNeural" # 成熟专业
 MALE_VOICE = "en-US-GuyNeural"      # 稳重
 FEMALE_VOICE = "en-US-JennyNeural"  # 活泼

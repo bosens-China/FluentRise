@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -11,6 +12,8 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.services.llm_factory import build_chat_model
+
+logger = logging.getLogger(__name__)
 
 
 class SentenceChunk(BaseModel):
@@ -107,6 +110,7 @@ class SentenceHelperService:
                 else SentenceBreakdownResult.model_validate(result)
             )
         except Exception:
+            logger.warning("句子拆解生成失败，使用兜底方案", exc_info=True)
             return self._fallback(clean_sentence, article_context)
 
     @staticmethod

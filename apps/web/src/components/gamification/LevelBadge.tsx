@@ -7,6 +7,13 @@ import { cn } from '@/lib/utils';
  * 显示用户当前等级，带有进度环
  */
 
+const SIZE_MAP = {
+  sm: 48,
+  md: 64,
+  lg: 80,
+  xl: 96,
+} as const;
+
 export interface LevelBadgeProps extends React.HTMLAttributes<HTMLDivElement> {
   /** 当前等级 */
   level: number;
@@ -33,7 +40,8 @@ const LevelBadge = React.forwardRef<HTMLDivElement, LevelBadgeProps>(
     };
 
     const strokeWidth = size === 'sm' ? 3 : size === 'md' ? 4 : 5;
-    const radius = (parseInt(sizeClasses[size].wrapper) - strokeWidth) / 2;
+    const sizePx = SIZE_MAP[size];
+    const radius = (sizePx - strokeWidth) / 2;
     const circumference = radius * 2 * Math.PI;
     const offset = circumference - (percentage / 100) * circumference;
 
@@ -45,10 +53,10 @@ const LevelBadge = React.forwardRef<HTMLDivElement, LevelBadgeProps>(
       >
         <div className={cn('relative', sizeClasses[size].wrapper)}>
           {/* 背景圆环 */}
-          <svg className="h-full w-full -rotate-90">
+          <svg className="h-full w-full -rotate-90" width={sizePx} height={sizePx} viewBox={`0 0 ${sizePx} ${sizePx}`}>
             <circle
-              cx="50%"
-              cy="50%"
+              cx={sizePx / 2}
+              cy={sizePx / 2}
               r={radius}
               fill="none"
               stroke="currentColor"
@@ -57,8 +65,8 @@ const LevelBadge = React.forwardRef<HTMLDivElement, LevelBadgeProps>(
             />
             {/* 进度圆环 */}
             <circle
-              cx="50%"
-              cy="50%"
+              cx={sizePx / 2}
+              cy={sizePx / 2}
               r={radius}
               fill="none"
               stroke="currentColor"

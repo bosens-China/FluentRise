@@ -90,10 +90,7 @@ async def get_current_user_info(user: CurrentUser) -> UserInfo:
 @router.get("/profile", response_model=UserProfileResponse, summary="获取用户完整资料")
 async def get_user_profile(
     current_user: CurrentUser,
-    db: DbSession,
 ) -> UserProfileResponse:
-    del db
-
     level_info = None
     if current_user.english_level is not None:
         level_data = ENGLISH_LEVELS.get(current_user.english_level)
@@ -171,14 +168,3 @@ async def submit_assessment(
     return UserInfo.model_validate(updated_user)
 
 
-@router.put("/assessment", response_model=UserInfo, summary="重新提交英语水平测评")
-async def reupdate_assessment(
-    request: UpdateAssessmentRequest,
-    current_user: CurrentUser,
-    db: DbSession,
-) -> UserInfo:
-    validate_learning_goals(request.learning_goals)
-    updated_user = await UserService.update_assessment(
-        db=db, user_id=current_user.id, request=request
-    )
-    return UserInfo.model_validate(updated_user)

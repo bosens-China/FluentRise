@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date
 
@@ -28,6 +29,8 @@ from app.schemas.article import (
     VocabularyWord,
 )
 from app.services.llm_factory import build_chat_model
+
+logger = logging.getLogger(__name__)
 
 
 class VocabularyPhoneticItem(BaseModel):
@@ -197,6 +200,7 @@ async def _enrich_missing_phonetics(
             else VocabularyPhoneticBatch.model_validate(response)
         )
     except Exception:
+        logger.warning("音标补全失败，返回原始词汇", exc_info=True)
         return vocabulary
 
     phonetic_map = {item.word.lower(): item for item in result.items}

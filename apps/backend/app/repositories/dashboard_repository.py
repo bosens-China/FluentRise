@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.article import Article
 from app.models.mistake_book import MistakeBookEntry
-from app.models.review_schedule import ReviewSchedule
+from app.models.review_schedule import REVIEW_COMPLETED_STAGE, ReviewSchedule
 from app.models.vocabulary import Vocabulary
 
 
@@ -42,7 +42,7 @@ async def count_pending_reviews(
         select(func.count())
         .select_from(ReviewSchedule)
         .where(ReviewSchedule.user_id == user_id)
-        .where(ReviewSchedule.current_stage < 10)
+        .where(ReviewSchedule.current_stage < REVIEW_COMPLETED_STAGE)
         .where(ReviewSchedule.next_review_date <= deadline)
     )
     return int(result.scalar_one())

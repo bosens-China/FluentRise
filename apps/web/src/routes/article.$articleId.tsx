@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   createFileRoute,
+  redirect,
   useNavigate,
   useSearch,
 } from '@tanstack/react-router';
@@ -30,12 +31,18 @@ import {
 } from '@/components/article';
 import type { FeedbackReason } from '@/components/article/ArticlePageModals';
 import { useMutation, useQuery } from '@/hooks/useData';
+import { isAuthenticated } from '@/lib/auth-storage';
 
 import { useArticleReviewAudio } from './useArticleReviewAudio';
 
 const { Paragraph, Text, Title } = Typography;
 
 export const Route = createFileRoute('/article/$articleId')({
+  beforeLoad: () => {
+    if (!isAuthenticated()) {
+      throw redirect({ to: '/login' });
+    }
+  },
   component: ArticlePage,
 });
 

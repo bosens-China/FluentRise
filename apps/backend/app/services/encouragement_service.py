@@ -4,6 +4,7 @@ AI 鼓励文案服务
 
 from __future__ import annotations
 
+import logging
 import random
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -11,6 +12,8 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.services.llm_factory import build_chat_model
+
+logger = logging.getLogger(__name__)
 
 
 class EncouragementResult(BaseModel):
@@ -104,6 +107,7 @@ class EncouragementService:
                 return result
             return EncouragementResult.model_validate(result)
         except Exception:
+            logger.warning("鼓励文案生成失败，使用兜底方案", exc_info=True)
             return self._fallback(context_type)
 
     def _fallback(self, context_type: str) -> EncouragementResult:

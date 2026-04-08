@@ -4,9 +4,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 
 from app.api.deps import CurrentUser, DbSession, StandardPagination
+from app.core.exceptions import NotFoundError
 from app.schemas.playground import (
     PracticeHistoryResponse,
     PracticeStatsResponse,
@@ -28,10 +29,7 @@ async def get_questions(
 ) -> QuestionListResponse:
     questions = await generate_questions(db, current_user.id)
     if not questions:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="暂无足够内容生成题目，请先完成今天的学习或积累一些生词",
-        )
+        raise NotFoundError("暂无足够内容生成题目，请先完成今天的学习或积累一些生词")
 
     return QuestionListResponse(
         questions=[QuestionResponse(**question.to_dict()) for question in questions],

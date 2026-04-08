@@ -10,7 +10,7 @@ from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.article import Article
-from app.models.review_schedule import ReviewLog, ReviewSchedule
+from app.models.review_schedule import REVIEW_COMPLETED_STAGE, ReviewLog, ReviewSchedule
 
 
 async def get_user_schedule_by_id(
@@ -80,7 +80,7 @@ async def count_review_schedules(
 ) -> int:
     query = select(func.count()).select_from(ReviewSchedule).where(ReviewSchedule.user_id == user_id)
     if completed_only:
-        query = query.where(ReviewSchedule.current_stage >= 8)
+        query = query.where(ReviewSchedule.current_stage >= REVIEW_COMPLETED_STAGE)
     return int((await db.execute(query)).scalar_one())
 
 
@@ -96,7 +96,7 @@ async def count_due_review_schedules(
         .where(
             and_(
                 ReviewSchedule.user_id == user_id,
-                ReviewSchedule.current_stage < 10,
+                ReviewSchedule.current_stage < REVIEW_COMPLETED_STAGE,
                 ReviewSchedule.next_review_date <= today_end,
             )
         )
@@ -117,7 +117,7 @@ async def count_overdue_review_schedules(
         .where(
             and_(
                 ReviewSchedule.user_id == user_id,
-                ReviewSchedule.current_stage < 10,
+                ReviewSchedule.current_stage < REVIEW_COMPLETED_STAGE,
                 ReviewSchedule.next_review_date <= today_end,
                 ReviewSchedule.next_review_date < today_start,
             )
@@ -138,7 +138,7 @@ async def list_due_review_items(
         .where(
             and_(
                 ReviewSchedule.user_id == user_id,
-                ReviewSchedule.current_stage < 10,
+                ReviewSchedule.current_stage < REVIEW_COMPLETED_STAGE,
                 ReviewSchedule.next_review_date <= today_end,
             )
         )

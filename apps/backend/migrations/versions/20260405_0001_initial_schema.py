@@ -25,6 +25,7 @@ def upgrade() -> None:
         sa.Column("english_level", sa.Integer(), nullable=True),
         sa.Column("learning_goals", sa.JSON(), nullable=True),
         sa.Column("custom_goal", sa.String(length=200), nullable=True),
+        sa.Column("interests", sa.JSON(), nullable=True),
         sa.Column(
             "has_completed_assessment",
             sa.Boolean(),
@@ -46,7 +47,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("user_id", sa.Integer(), nullable=False),
         sa.Column("title", sa.String(length=200), nullable=False),
-        sa.Column("publish_date", sa.Date(), nullable=False),
+        sa.Column("publish_date", sa.Date(), nullable=True),
         sa.Column("level", sa.Integer(), nullable=False),
         sa.Column("source_book", sa.Integer(), nullable=True),
         sa.Column("source_lesson", sa.Integer(), nullable=True),
@@ -57,6 +58,9 @@ def upgrade() -> None:
         sa.Column("exercises", sa.JSON(), nullable=True),
         sa.Column("is_read", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("is_completed", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        sa.Column("needs_repeat", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("proposal_id", sa.Integer(), nullable=True),
         sa.Column(
             "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
         ),
@@ -64,11 +68,35 @@ def upgrade() -> None:
             "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
         ),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["proposal_id"], ["article_proposals.id"], ondelete="SET NULL"),
         sa.UniqueConstraint("user_id", "publish_date", name="uq_articles_user_publish_date"),
     )
     op.create_index("ix_articles_id", "articles", ["id"], unique=False)
     op.create_index("ix_articles_publish_date", "articles", ["publish_date"], unique=False)
     op.create_index("ix_articles_user_id", "articles", ["user_id"], unique=False)
+    op.create_index("ix_articles_proposal_id", "articles", ["proposal_id"], unique=False)
+
+    op.create_table(
+        "article_proposals",
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("user_id", sa.Integer(), nullable=False),
+        sa.Column("title", sa.String(length=200), nullable=False),
+        sa.Column("description", sa.Text(), nullable=True),
+        sa.Column("level", sa.Integer(), nullable=False),
+        sa.Column("order_index", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("status", sa.String(length=20), nullable=False, server_default="pending"),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
+    )
+    op.create_index("ix_article_proposals_id", "article_proposals", ["id"], unique=False)
+    op.create_index(
+        "ix_article_proposals_user_id", "article_proposals", ["user_id"], unique=False
+    )
 
     op.create_table(
         "memberships",
@@ -321,8 +349,13 @@ def downgrade() -> None:
 
     op.drop_index("ix_articles_user_id", table_name="articles")
     op.drop_index("ix_articles_publish_date", table_name="articles")
+    op.drop_index("ix_articles_proposal_id", table_name="articles")
     op.drop_index("ix_articles_id", table_name="articles")
     op.drop_table("articles")
+
+    op.drop_index("ix_article_proposals_user_id", table_name="article_proposals")
+    op.drop_index("ix_article_proposals_id", table_name="article_proposals")
+    op.drop_table("article_proposals")
 
     op.drop_index("ix_users_phone", table_name="users")
     op.drop_index("ix_users_id", table_name="users")
